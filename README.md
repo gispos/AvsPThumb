@@ -40,7 +40,7 @@ Finds the AvsPmod window even if the avs is present in an AvsPmod tab. So you ca
 
 Constraints
 ----------------
-In AvsPmod you have to disable 'Video preview only on top' (Options menu).
+In AvsPmod you have to disable 'Video preview always on top' (Options menu).
 
 When a saved stream is opened, AvsPThumb finds the AvsPmod window only:
 The stream (.bk3, .bk6) filename must be the same as the avs file. 'Stars.mkv.avs' = 'Stars.mkv.bk6'
