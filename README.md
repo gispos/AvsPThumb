@@ -59,19 +59,19 @@ Command menu entries can be created in AvsPThumb. They are displayed in the pop-
 Use commands:
 Commands can be entered in the text file 'AvsPCommand.txt'. Commands are AvsPmod menu entries.
 
-Copy image to clipboard=2
-Fire up|Toggle extended left move=2|MinScriptLines=4,2,0
+Copy image to clipboard=2.
+Fire up|Toggle extended left move=2|MinScriptLines=4,2,0.
 
-1.) Search 'Copy image to clipboard' in the 3rd menu
-2.) Text for the own menu 'Fire up' | Search for 'Toggle extended left move' in the 3rd menu | Select 5.Menu, select in it 3. Menu, select in it 1. Menu and search for 'MinScriptLines'
+1.) Search 'Copy image to clipboard' in the 3rd menu.
+2.) Text for the own menu 'Fire up' | Search for 'Toggle extended left move' in the 3rd menu | Select 5.Menu, select in it 3. Menu, select in it 1. Menu and search for 'MinScriptLines'.
 
 Note: Entries always start at 0, so the 1st menu is 0
-'Copy image to clipboard' can be found in AvsPmod under Menu 2 ! And not 3
+'Copy image to clipboard' can be found in AvsPmod under Menu 2 ! And not 3.
 
 So '|' is a separator for multiple commands.
-For multiple commands, the name must appear in the beginning of the menu (The Name | then the functions)
+For multiple commands, the name must appear in the beginning of the menu (The Name | then the functions).
 
-And '-' without quotes is a separator in the AvsP Thumb menu
+And '-' without quotes is a separator in the AvsP Thumb menu.
 
-Commands can be deactivated with '#'
+Commands can be deactivated with '#'.
 #Copy image to clipboard=2
