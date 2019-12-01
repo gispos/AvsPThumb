@@ -53,7 +53,9 @@ AvsPThumb will automatically suggest the file name in the save dialog.
 
 Save multiple streams, so you can have different thumbnail sizes from the same avs file:
 Permitted addition for e.g. 'Stars.mkv.avs' is an underscore with a number: Stars.mkv_2.bk6, Stars.mkv_3.bk6 and so on.
-AvsPThumb will then search for 'Stars.mkv.avs'.
+AvsPThumb will then search for 'Stars.mkv.avs'.  
+
+After finding the AvsPmod window or sending a command, AvsPThumb waits a maximum of 31 seconds for a response from AvsPmod. AvsPThumb can not be closed during this time. There will be an hint when closing.  
 
 Commands
 -------------
