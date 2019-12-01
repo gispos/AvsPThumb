@@ -48,7 +48,7 @@ The stream (.bk3, .bk6) filename must be the same as the avs file. 'Stars.mkv.av
 Please also use to save the avs files and the bk6 files always the name of the source incl. Extension.
 AvsPThumb will automatically suggest the file name in the save dialog.
 
-Save multiple streams, so different thumbnail sizes from the same avs file:
+Save multiple streams, so you can have different thumbnail sizes from the same avs file:
 Permitted addition for e.g. 'Stars.mkv.avs' is an underscore with a number: Stars.mkv_2.bk6, Stars.mkv_3.bk6 and so on.
 AvsPThumb will then search for 'Stars.mkv.avs'.
 
