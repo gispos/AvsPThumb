@@ -43,7 +43,7 @@ Constraints
 ----------------
 In AvsPmod you have to disable 'Video preview always on top' (Options menu).  
 
-AvsPThumb' needs write permission in the own directory.  
+AvsPThumb needs write permission in the own directory.  
 
 When a saved stream is opened, AvsPThumb finds the AvsPmod window only:
 The stream (.bk3, .bk6) filename must be the same as the avs file. 'Stars.mkv.avs' = 'Stars.mkv.bk6'
@@ -65,7 +65,7 @@ Commands can be entered in the text file 'AvsPCommand.txt'. Commands are AvsPmod
 Copy image to clipboard=2  
 Fire up|Toggle extended left move=2|MinScriptLines=4,2,0  
 
-1.) Search 'Copy image to clipboard' in the 3rd menu  
+1.) Search for 'Copy image to clipboard' in the 3rd menu  
 2.) Text for the own menu 'Fire up' | Search for 'Toggle extended left move' in the 3rd menu | Select 5.Menu, select in it 3. Menu, select in it 1. Menu and search for 'MinScriptLines'  
  
 Note: Entries always start at 0, so the 1st menu is 0  
@@ -74,7 +74,7 @@ Note: Entries always start at 0, so the 1st menu is 0
 So '|' is a separator for multiple commands  
 For multiple commands, the name for the menu must appear in the beginning (The Name | then the functions)  
  
-And '-' without quotes is a separator in the AvsP Thumb menu  
+And '-' without quotes is a separator in the AvsPThumb menu  
 
 Commands can be deactivated with '#'  
 #Copy image to clipboard=2  
