@@ -3,6 +3,7 @@ AvsPmod bookmark reader
 
 - Reads bookmarks saved with AvsPmod in avs script. Also reads a bookmarks list (cr.txt).
 - You can save the read as a stream, to open quickly with AvsPThumb.
+- Can send commands to AvsPmod.
 
 How to do
 ---------------
