@@ -69,7 +69,7 @@ Note: Entries always start at 0, so the 1st menu is 0
 'Copy image to clipboard' can be found in AvsPmod under Menu 2 ! And not 3  
   
 So '|' is a separator for multiple commands  
-For multiple commands, the name must appear in the beginning of the menu (The Name | then the functions)  
+For multiple commands, the name for the menu must appear in the beginning (The Name | then the functions)  
  
 And '-' without quotes is a separator in the AvsP Thumb menu  
 
