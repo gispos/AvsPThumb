@@ -436,6 +436,10 @@ object Form1: TForm1
       Caption = 'Run AvsPmod'
       OnClick = popRunAvsPClick
     end
+    object popRunAvsPAllTabs: TMenuItem
+      Caption = 'Run AvsPmod all tabs'
+      OnClick = popRunAvsPAllTabsClick
+    end
     object popSendCommand: TMenuItem
       AutoHotkeys = maManual
       Caption = 'Send Command'
@@ -462,6 +466,12 @@ object Form1: TForm1
     object popCloseOtherTabs: TMenuItem
       Caption = 'Close all other tabs'
       OnClick = popCloseOtherTabsClick
+    end
+    object N16: TMenuItem
+      Caption = '-'
+    end
+    object popSendTab: TMenuItem
+      Caption = 'Send tab to'
     end
     object N13: TMenuItem
       Caption = '-'

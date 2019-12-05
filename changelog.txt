@@ -1,0 +1,4 @@
+2.0.1 [05.12.2019]
+- Add 'Run AvsPmod all tabs'
+- Add 'Send tab to' sends the tab to the AvsPmod window that appears in the selected tab
+- Other small changes

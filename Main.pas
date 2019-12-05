@@ -2,7 +2,7 @@
 ----------------------------
   AvsPmod bookmark reader
 
-  GPo 2019  v2.00
+  GPo 2019  v2.0.1
 
 ----------------------------
 *)
@@ -136,6 +136,9 @@ type
     popBackgroundColor: TMenuItem;
     ColorDialog: TColorDialog;
     popCloseOtherTabs: TMenuItem;
+    popSendTab: TMenuItem;
+    N16: TMenuItem;
+    popRunAvsPAllTabs: TMenuItem;
     procedure LVSelectItem(Sender: TObject; Item: TListItem;
       Selected: Boolean);
     procedure FormCreate(Sender: TObject);
@@ -201,6 +204,7 @@ type
     procedure popBackgroundColorClick(Sender: TObject);
     procedure popCloseOtherTabsClick(Sender: TObject);
     procedure PopUpTabPopup(Sender: TObject);
+    procedure popRunAvsPAllTabsClick(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
     procedure AppOnMessages(var Msg: TMsg; var Handled: Boolean);
@@ -221,6 +225,7 @@ type
     FHide_SB_HORZ : Boolean;
     FListViewWndProc: TWndMethod;
     FHistoryList: TStringList;
+    FEnumWndFindFile: String;
     procedure ListView_SetWidth;
     procedure Clear(const doFree: boolean=False);
     function AddFavorList(Source, Targed : TList; Index: Integer): Integer;
@@ -230,6 +235,7 @@ type
     procedure OnCommand(Sender: TObject);
     procedure BlockInput;
     procedure UnblockInput;
+    procedure SendClipToAvsWnd(Sender: TObject);
     //~procedure WaitProc(Proc: TProc; const Priority: TThreadPriority = tpNormal);
     //~procedure AppOnIdle(Sender: TObject; var Done: boolean);
 
@@ -308,7 +314,7 @@ var
 
 implementation
 uses StretchF, FileUtils, Math, GPoUtils, System.Generics.Collections,
-     System.Generics.Defaults, Optionen;
+     System.Generics.Defaults;
 
 {$R *.dfm}
 {$IFDEF WIN32}
@@ -482,15 +488,24 @@ begin
 end;
 
 function MakeAVSExt(const s : String): String;
+var
+  e: String;
 begin
   if SameText(ExtractFileExt(s), '.avs') then
     Result:= s
-  else if IsBookmarkExt(s) then
+  else if SameText(ExtractFileExt(s), fext) then  //- .bk6, .bk3
+  begin
+    Result:= ChangeFileExt(s, '.avs');
+    If not FileExists(Result) then
+    begin
+      e:= RemoveFileExt(s);
+      If (Length(e) > 2) and (StrGetDigit(e, Length(e)) <> '') and (e[Length(e)-1] = '_') then
+        Result:= Copy(e, 1, Length(e)-2) + '.avs';
+    end;
+  end
+  else if IsBookmarkExt(s) then  //- .cr.txt
     Result:= ChangeFileExt(ChangeFileExt(s, ''), '.avs')
-  else
-    if SameText(ExtractFileExt(s), fext) then
-      Result:= ChangeFileExt(s, '.avs')
-    else  Result:= s + '.avs';
+  else Result:= s + '.avs';
 end;
 
 function SortListFunc_FrameNr(p1,p2: Pointer): Integer;  inline;
@@ -559,7 +574,7 @@ begin
       If L > 0 then  //- force all AvsPmod to find the tab
       begin
         Clip.AvsWnd:= 0; //- at first
-        Form1.SendCopyData(H, ExtractFileNameNoExt(Clip.LastOpen), Integer(Clip), L);
+        Form1.SendCopyData(H, Form1.FEnumWndFindFile, Integer(Clip), L);
         sleep(40); //- wait short time for AvsPmod returned value
         Application.ProcessMessages; //- process messages from AvsP
         Result:= Clip.AvsWnd = 0;    //- break if tab found > 0 = False then break
@@ -818,17 +833,11 @@ begin
     s:= MakeAVSExt(CurrentClip.LastOpen);
     s:= s + ' - AvsPmod';
     CurrentClip.AvsWnd:= FindWindow('wxWindowClassNR', PWideChar(s));
-    if (CurrentClip.AvsWnd = 0) and Assigned(CurrentClip.FileStream) then
-    begin
-      s:= RemoveFileExt(CurrentClip.LastOpen);        // find num 'FileName.avs_2.bk3'
-      If (Length(s) > 2) and (StrGetDigit(s, Length(s)) <> '') and (s[Length(s)-1] = '_') then
-      begin
-        s:= Copy(s, 1, Length(s)-2)+ '.avs';
-        CurrentClip.AvsWnd:= FindWindow('wxWindowClassNR', PWideChar(s));
-      end;
-    end;
     if CurrentClip.AvsWnd = 0 then
-      EnumDesktopWindows(0,@enumWindows,timeout)
+    begin
+      FEnumWndFindFile:= ExtractFileNameNoExt(s);
+      EnumDesktopWindows(0,@enumWindows,timeout);
+    end;
   end;
 
   Result:= CurrentClip.AvsWnd <> 0;
@@ -1263,6 +1272,8 @@ begin
   end;
   CloseTabs(a);
 end;
+
+
 
 procedure TForm1.Clear(const doFree: boolean=False);
 var
@@ -2534,9 +2545,28 @@ begin
   end;
 end;
 
+procedure TForm1.popRunAvsPAllTabsClick(Sender: TObject);
+var
+  param,s: String;
+  i: Integer;
+begin
+  For i:= 0 to TabView.Tabs.Count -1 do
+  begin
+    s:= MakeAVSExt(GetClip(i).LastOpen);
+    If FileExists(s) then
+      param:= param + '"' + s + '" ';
+    if i > 19 then //- more ?
+      break;
+  end;
+
+  If FileUtils.ExecuteFile(fRunProg, param) < 33 then
+    MessageBeep(MB_ICONERROR)
+  else sleep(100);
+end;
+
 procedure TForm1.popRunAvsPClick(Sender: TObject);
 var
-  avs,s: String;
+  avs: String;
 begin
   If not FileExists(fRunProg) or (Byte(GetKeyState(VK_CONTROL)) > 100) then
   with OpenDlg do
@@ -2562,15 +2592,6 @@ begin
   end;
 
   avs:= MakeAVSExt(CurrentClip.LastOpen);
-  If Assigned(CurrentClip.FileStream) then
-  begin
-    If not FileExists(avs) then //- _2, _3 etc. aus Bookstream Name entfernen
-    begin
-      s:= RemoveFileExt(CurrentClip.LastOpen);
-      If (Length(s) > 2) and (StrGetDigit(s, Length(s)) <> '') and (s[Length(s)-1] = '_') then
-        avs:=  Copy(s, 1, Length(s)-2)+ '.avs';
-    end;
-  end;
 
   If FileExists(avs) then
   begin
@@ -2602,9 +2623,11 @@ begin
     BringWindowToTop(Handle);
     SetActiveWindow(Handle);
   end
-  else ShowMessage('No ".avs" file found.'#13+ ExtractFileName(avs));
+  else ShowMessage('Cannot find the avs file.'#13#13 + ExtractFileName(avs));
 
 end;
+
+
 
 procedure TForm1.popSaveBookmarksClick(Sender: TObject);
 var
@@ -2723,8 +2746,8 @@ begin
     If fileName = '' then with OpenDlg do
     begin
       Filter:= 'All supported files|*.avs;*.cr.txt;*'+fext+'|'+
-               'Bookmarks (*.avs, *.cr.txt)|*.avs;*.cr.txt|'+
                'Avisynht (*.avs)|*.avs|'+
+               'Bookmarks (*.cr.txt)|*.cr.txt|'+
                'Bookstream (*' + fext +')|*' + fext;
       If CurrentClip.LastFile <> '' then
       begin
@@ -2734,7 +2757,8 @@ begin
       else if (CurrentClip.LastOpen <> '') then
       begin
         InitialDir:= ExtractFilePath(CurrentClip.LastOpen);
-        OpenDlg.FileName:= ExtractFileNameNoExt(CurrentClip.LastOpen) + '.avs';
+        OpenDlg.FileName:= MakeAVSExt(CurrentClip.LastOpen);
+        //~OpenDlg.FileName:= ExtractFileNameNoExt(CurrentClip.LastOpen) + '.avs';
       end;
       If not Execute then
         exit;
@@ -3159,8 +3183,6 @@ begin
     Halt;
   End;
 
-  //~FormOptions:= TFormOptions.Create(self);
-
   Caption:= myName;
   popLoadFromStream.Caption:= 'Load from Stream (' + fext + ')';
   popSaveToStream.Caption:= 'Save to Stream (' + fext + ')';
@@ -3211,11 +3233,7 @@ begin
       popForceAvsPWnd.Checked:= ini.ReadBool('Main', 'TabForceAvsWnd', False);
       popShowPreview.Checked:= ini.ReadBool('Main', 'TabShowPreview', True);
       LV.Color:= ini.ReadInteger('Main', 'BackgroundColor', clBlack);
-      //- FormOptions
-      If Assigned(FormOptions) then with FormOptions do
-      begin
-        cbTheme.ItemIndex:= ini.ReadInteger('Main', 'Theme', 0);
-      end;
+
       //- Tweaks
       //-- hide the LV horizontal scroll bar
       FHide_SB_HORZ:= ini.ReadBool('Tweaks', 'Hide_SB_HORZ', true);
@@ -3370,8 +3388,6 @@ begin
     ini:= TInifile.Create(ChangeFileExt(Application.ExeName, '.ini'));
   except
     FHistoryList.Free;
-    If Assigned(FormOptions) then
-      FormOptions.Free;
     MessageDlg('Can not save the options file, no write access to:'#13+
                 ProgramPath, mtError, [mbOK],0);
     exit;
@@ -3405,12 +3421,6 @@ begin
       ini.WriteBool('Main', 'TabShowPreview', popShowPreview.Checked);
       ini.WriteInteger('Main', 'BackgroundColor', LV.Color);
 
-      //- FormOptions, not needed at the moment
-      If Assigned(FormOptions) then with FormOptions do
-      begin
-        ini.WriteInteger('Main', 'Theme', cbTheme.ItemIndex);
-      end;
-
       //- Tweaks
       ini.WriteBool('Tweaks', 'Hide_SB_HORZ', FHide_SB_HORZ);
       ini.WriteBool('Tweaks', 'StyleHook_shDialog', not (shDialogs in TStyleManager.SystemHooks));
@@ -3418,8 +3428,6 @@ begin
       ini.Free;
     End;
   end;
-  If Assigned(FormOptions) then
-    FormOptions.Free;
 end;
 
 function TForm1.LoadBookmarksFromFile(const fileName: String; FrList,FavList: TList): Integer;
@@ -3991,7 +3999,6 @@ begin
   //~else ShowMessage('Error while writing stream');
 end;
 
-
 //- Only save favorites only if a bookstream has been opened.
 //- No deterioration of thumbnail quality.
 //- Nur Favoriten speichern, nur wenn ein Bookstream geöffnet wurde.
@@ -4519,7 +4526,7 @@ begin
   Try
     With CurrentClip.FileStream do
     begin
-      Position:= SizeOf(Integer); //- Header
+      Position:= SizeOf(Integer); //- skip Header
       While Position < Size-50 do
       begin
         start:= Integer(Position);
@@ -4533,8 +4540,6 @@ begin
         i:= List_IndexOfFrameNr(CurrentClip.FrameList, Nr);
         If InRange(i, idxStart, idxEnd) then
         begin
-          //- ! can create double numbers !
-          //~inc(PFrameRec(FrameList[List_IndexOfFrameNr(FrameList, Nr)])^.FrameNr, Amount);
           inc(Nr, Amount);
           Position:= start;
           Write(Nr, SizeOf(Integer));
@@ -4570,11 +4575,57 @@ begin
   popSaveBookmarks.Enabled:= CurrentClip.FrameList.Count > 0;
   popOpenLastSavedStream.Enabled:= popOpenLastSavedStream.Count > 0;
   popSaveToStream.Enabled:= CurrentClip.FrameList.Count > 0;
+  popRunAvsPAllTabs.Visible:= (fRunProg <> '') and (TabView.Tabs.Count > 1);
+end;
+
+procedure TForm1.SendClipToAvsWnd(Sender: TObject);
+var
+  s: String;
+begin
+  If FInProgress then
+  begin
+    beep;
+    exit;
+  end;
+
+  s:= MakeAVSExt(CurrentClip.LastOpen);
+  If FileExists(s) then
+  begin
+    FInProgress:= True;
+    Screen.Cursor:= crHourGlass;
+    Application.ProcessMessages;
+    SendCopyData(GetClip(TMenuItem(Sender).Tag).AvsWnd,s,2,2000); //- Wait max 2 seconds
+    Screen.Cursor:= crDefault;
+    FInProgress:= false;
+  end
+  else
+    MessageDlg('Cannot find the avs file.'#13#13+
+               ExtractFileName(s),mtInformation,[mbOk],0);
 end;
 
 procedure TForm1.PopUpTabPopup(Sender: TObject);
+var
+  i: Integer;
+  item: TMenuItem;
+  Clip: TClip;
 begin
   popCloseOtherTabs.Enabled:= TabView.Tabs.Count > 1;
+  popSendTab.Clear;
+  If TabView.Tabs.Count > 1 then
+  begin
+    For i:= 0 to TabView.Tabs.Count -1 do if (i <> TabView.TabIndex) then
+    begin
+      Clip:= GetClip(i);
+      If (Clip.AvsWnd <> 0) and (Clip.AvsWnd <> CurrentClip.AvsWnd) and IsWindow(Clip.avsWnd) then
+      begin
+        item:= TMenuItem.Create(popSendTab);
+        item.Caption:= 'Wnd tab ' + IntToStr(i+1);
+        item.OnClick:= SendClipToAvsWnd;
+        popSendTab.Add(item);
+      end;
+    end;
+  end;
+  popSendTab.Enabled:= popSendTab.Count > 0;
 end;
 
 end.

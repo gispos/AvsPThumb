@@ -7,8 +7,7 @@ uses
   Main in 'Main.pas' {Form1},
   SingleInstance in 'SingleInstance.pas',
   Vcl.Themes,
-  Vcl.Styles,
-  Optionen in 'Optionen.pas' {FormOptions};
+  Vcl.Styles;
 
 {$R *.res}
 
