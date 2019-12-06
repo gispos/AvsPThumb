@@ -1,4 +1,4 @@
-# AvsPThumb v2.0.1
+# AvsPThumb v2.0.2
 AvsPmod bookmark reader
 
 - Reads bookmarks saved with AvsPmod in avs script. Also reads a bookmarks list (cr.txt).

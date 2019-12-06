@@ -3265,32 +3265,42 @@ begin
 
     //- Send command to AvsP menu  (add submenus to 'Send command')
     SL.Clear;
-    Try
-      If FileExists(ProgramPath + 'AvsPCommand.txt') then
+
+    If FileExists(ProgramPath + 'AvsPCommand.txt') then
+    begin
+      Try
         SL.LoadFromFile(ProgramPath + 'AvsPCommand.txt');
-      For i:= 0 to SL.Count-1 do if not TrimLeft(SL[i]).StartsWith('#') then
-      begin
-        item:= TMenuItem.Create(self);
-        popSendCommand.Add(item);
-        If SL[i].Contains('|') then
+        For i:= 0 to SL.Count-1 do if not TrimLeft(SL[i]).StartsWith('#') then
         begin
-          x:= Pos('|', SL[i]);
-          item.Caption:= Trim(Copy(SL[i],1,x-1));
-          item.Hint:= Trim(Copy(SL[i], x+1, MaxInt));
-        end
-        else if TrimLeft(SL[i]).StartsWith('-') then
-        begin
-          item.Caption:= '-';    //- Add a item seperator
-          Continue;
-        end
-        else begin
-          item.Caption:= SL.Names[i];
-          item.Hint:= SL[i];
+          item:= TMenuItem.Create(self);
+          popSendCommand.Add(item);
+          If SL[i].Contains('|') then
+          begin
+            x:= Pos('|', SL[i]);
+            item.Caption:= Trim(Copy(SL[i],1,x-1));
+            item.Hint:= Trim(Copy(SL[i], x+1, MaxInt));
+          end
+          else if TrimLeft(SL[i]).StartsWith('-') then
+          begin
+            item.Caption:= '-';    //- Add a item seperator
+            Continue;
+          end
+          else begin
+            item.Caption:= SL.Names[i];
+            item.Hint:= SL[i];
+          end;
+          item.AutoHotkeys:= maManual;
+          item.OnClick:= OnCommand;
         end;
-        item.AutoHotkeys:= maManual;
-        item.OnClick:= OnCommand;
+      except
       end;
-    except
+    end
+    else begin
+      SL.Add('#Copy image to clipboard=2');
+      Try
+        SL.SaveToFile(ProgramPath + 'AvsPCommand.txt');
+      except
+      end;
     end;
 
     //-Themes
@@ -4620,6 +4630,7 @@ begin
       begin
         item:= TMenuItem.Create(popSendTab);
         item.Caption:= 'Wnd tab ' + IntToStr(i+1);
+        item.Tag:= i;
         item.OnClick:= SendClipToAvsWnd;
         popSendTab.Add(item);
       end;
