@@ -62,31 +62,31 @@ After finding the AvsPmod window or sending a command, AvsPThumb waits a maximum
 Clips to clip
 --------------- 
 This function can be found under Extras. The function creates a single clip (script) from all tabs.
-Advantages is the minimized memory requirement of Avisynth.
-
-Prerequisite:
-1.) Each tab must be an opened bk6 file and the avs file must be in the same directory.
-2.) The video and audio parameters of the clips must match.
-3.) The thumbnail size of the bk6 files (tabs) must match or the result is not nice.
-
-What is being done:
+Advantages is the minimized memory requirement of Avisynth.  
+  
+Prerequisite:  
+1.) Each tab must be an opened bk6 file and the avs file must be in the same directory.  
+2.) The video and audio parameters of the clips must match.  
+3.) The thumbnail size of the bk6 files (tabs) must match or the result is not nice.  
+  
+What is being done:  
 All bookmark positions of the individual clips are corrected and a bk6 file with the corrected values is created.
 An avs file with all clips as functions is created and the new calculated bookmarks is written to the 2th line in the avs file.
 Some parameters for each clip are deactivated in the new avs file:
 Prefetch, SetMemoryMax and MCTemporalDenoise 'GPU=True' is changed to 'GPU=False'.
-
-Limitation:
+  
+Limitation:  
 AvsPmod can store a maximum of 1000 bookmarks in the menu. 
 If this is exceeded, a message is displayed and no further clips are added.
 If requested, this could be changed to perhaps 2000.
 
-Bug:
-The AvsPmod editor shows no text that is longer than ~ 1000 characters. 
-So it may be that the line with the new bookmarks is not displayed. The remedy is to activate the line break.
+Bug:  
+The AvsPmod editor shows no text that is longer than ~ 1000 characters.   
+So it may be that the line with the new bookmarks is not displayed. The remedy is to activate the line break.  
 
-Note: 
-The function is not intended to open 10 or more 1.5 hour films! 
-Tested with 18 Full HD clips each 100 to 600 MB. With some filters for each clip Avisynth memory usage ~ 5000 MB
+Note:  
+The function is not intended to open 10 or more 1.5 hour films!  
+Tested with 18 Full HD clips each 100 to 600 MB. With some filters for each clip Avisynth memory usage ~ 5000 MB  
 
 Commands
 -------------
