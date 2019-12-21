@@ -395,6 +395,10 @@ object Form1: TForm1
         Caption = 'Save Bookmarks (*.cr)'
         OnClick = popSaveBookmarksClick
       end
+      object popClipsToClip: TMenuItem
+        Caption = 'Clips to clip...'
+        OnClick = popClipsToClipClick
+      end
       object N10: TMenuItem
         Caption = '-'
       end

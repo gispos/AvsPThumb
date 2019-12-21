@@ -1,3 +1,7 @@
+2.0.3 [19.12.2019]
+- New function 'Clips to clip' see readme.
+- New AvsPmod macro 'Fire up' see macros readme
+
 2.0.2 [06.12.2019]
 - Bugfix 'Send tab to'
 - Add macros for AvsPmod

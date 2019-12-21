@@ -2,7 +2,7 @@
 ----------------------------
   AvsPmod bookmark reader
 
-  GPo 2019  v2.0.1
+  GPo 2019  v2.0.3
 
 ----------------------------
 *)
@@ -139,6 +139,7 @@ type
     popSendTab: TMenuItem;
     N16: TMenuItem;
     popRunAvsPAllTabs: TMenuItem;
+    popClipsToClip: TMenuItem;
     procedure LVSelectItem(Sender: TObject; Item: TListItem;
       Selected: Boolean);
     procedure FormCreate(Sender: TObject);
@@ -205,6 +206,7 @@ type
     procedure popCloseOtherTabsClick(Sender: TObject);
     procedure PopUpTabPopup(Sender: TObject);
     procedure popRunAvsPAllTabsClick(Sender: TObject);
+    procedure popClipsToClipClick(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
     procedure AppOnMessages(var Msg: TMsg; var Handled: Boolean);
@@ -269,6 +271,7 @@ type
     procedure LV_MakeItemVisible(const idx: Integer; const DoSelect: boolean = True);
     procedure LV_StyleBugFix;
     procedure LV_SaveOrigin;
+    procedure ClipsToClip(const SaveName: String);
     //~function Clips_IndexOfAvsWnd(const hWnd : THandle): Integer;
   end;
 
@@ -330,6 +333,11 @@ var
   double_click: boolean = False;
   //AddOnRec: TAddOnRec;
   rect_down: TRect;
+
+function SortListFunc_Bookmarks(List: TStringList; Index1, Index2: Integer): Integer;
+begin
+  Result:= CompareValue(StrToInt(List.KeyNames[Index1]), StrToInt(List.KeyNames[Index2]));
+end;
 
 //******************************************************************************
 //- Clip
@@ -1334,6 +1342,26 @@ procedure TForm1.popClearFileHistoryClick(Sender: TObject);
 begin
   FHistoryList.Clear;
   popOpenLastSavedStream.Clear;
+end;
+
+procedure TForm1.popClipsToClipClick(Sender: TObject);
+begin
+  If FInProgress then
+  begin
+    beep;
+    exit;
+  end;
+
+  With SaveDlg do
+  begin
+    Filter:= 'Bookmarks (' + fext + ')|*' + fext;
+    DefaultExt:= fext;
+    InitialDir:= ExtractFilePath(CurrentClip.LastOpen);
+    If not Execute(Handle) then
+      exit;
+  end;
+
+  ClipsToClip(RemoveFileExt(SaveDlg.FileName));
 end;
 
 procedure TForm1.popClearBasketClick(Sender: TObject);
@@ -3761,6 +3789,7 @@ begin
       end;
     Except
       RaiseLastOSError;
+      exit;
     End;
   Finally
     jpg.Free;
@@ -4569,6 +4598,210 @@ begin
   CurrentClip.NeedSave:= not Assigned(CurrentClip.FileStream) or not direct;
 end;
 
+procedure TForm1.ClipsToClip(const SaveName: String);
+var
+  fs: TFileStream;
+  SL,Bookmarks: TStringList;
+  TH: THandle;
+  THR: TThread;
+  i,bmAll: Integer;
+begin
+  bmAll:= 0;
+  For i:= 0 to TabView.Tabs.Count -1 do
+   inc(bmAll, GetClip(i).FrameList.Count);
+  If bmAll > 1000 then
+  begin
+    If MessageDlg('AvsPmod maximum bookmark count is 1000.'#13+
+                  'The bookmark count of all clips is '+ IntToStr(bmAll)+#13+
+                  'So not all clips can be added.'#13+
+                  'Further?', mtInformation, mbYesNo,0) <> mrYes then
+                    exit;
+  end;
+
+  fs:= nil;
+  SL:= TStringList.Create;
+  Bookmarks:= TStringList.Create;
+  BlockInput;
+  ProgressBar1.Max:= TabView.Tabs.Count;
+  ProgressBar1.Position:= 0;
+  Panel1.Visible:= True;
+  FStop:= False;
+  Application.ProcessMessages;
+
+  Try
+    THR:= TThread.CreateAnonymousThread(procedure
+    var
+      i,e,c,sc,Nr,Count,bmCount: Integer;
+      Clip: TClip;
+      c_start: Int64;
+      b: Byte;
+      FFStop: boolean;
+      fileName, title, script, s: String;
+      clipErr, fileErr: String;
+
+      procedure AddToScript(const fname: String; idx: Integer);
+      var
+        i: Integer;
+        s: String;
+      begin
+        SL.Clear;
+        SL.LoadFromFile(fname);
+        For i:= 0 to SL.Count-1 do  // disable prefetch and MCTD GPU
+        begin
+          s:= TrimLeft(SL[i]);
+          if s.StartsWith('prefetch',True) or s.StartsWith('#Bookmarks:', True) or
+             s.StartsWith('SetMemoryMax',True)then
+               SL[i]:= '#~' + s
+          else
+            If s.StartsWith('MCT', True) then
+              SL[i]:= StringReplace(s,'GPU=True', 'GPU=False', [rfIgnoreCase]);
+        end;
+        script:= script + 'function script_' + IntTosTr(idx) + '(){'#13 +
+                 Trim(SL.Text) + #13 + '}'#13#13;
+      end;
+
+    begin
+      sc:= 0;
+      FFStop:= false;
+      bmCount:= 0;
+      Count:= 0;
+      Try
+        fs:= TFileStream.Create(SaveName + fext, fmCreate);
+        fs.Size:= 0;
+        fs.Write(HeaderFlag, SizeOf(Integer));
+
+        For i:= 0 to TabView.Tabs.Count -1 do
+        begin
+          TThread.Synchronize(nil, procedure
+          begin
+            If clipErr <> '' then
+              ShowMessage(clipErr);
+            ProgressBar1.StepIt;
+            Caption:= Format('Clip: %d/%d - Bookmarks: %d/%d', [Count,TabView.Tabs.Count,bmCount,bmAll]);
+            If not FFStop then
+              FFStop:= FStop;
+          end);
+          If FFStop then
+            break;
+          clipErr:= '';
+
+          Clip:= GetClip(i);
+
+          if not Assigned(Clip.FileStream) then
+          begin
+            fileErr:= fileErr + ExtractFileName(Clip.LastOpen) + #13;
+            Continue;
+          end;
+
+          fileName:= MakeAVSExt(Clip.LastOpen);
+          If not FileExists(fileName) then
+          begin
+            fileErr:= fileErr + ExtractFileName(fileName) + #13;
+            Continue;
+          end;
+
+          If bmCount + Clip.FrameList.Count > 1000 then
+          begin
+            clipErr:= 'Now ' + IntToStr(bmCount) + ' have been added.'#13+
+                      'Can''t add the next clips. Sorry.';
+
+            FFStop:= True;
+            Continue;
+          end;
+
+          c:= AvsGrabber.OpenAvs(fileName);
+          clipErr:= AvsGrabber.ClipError;
+          AvsGrabber.Close;
+          If (c < 1) or (clipErr <> '') then
+          begin
+            fileErr:= fileErr + ExtractFileName(fileName) + #13;
+            Continue;
+          end;
+
+          AddToScript(fileName, i+1);
+          Clip.FileStream.Position:= SizeOf(Integer);
+          c_start:= fs.Size;
+          fs.Position:= fs.Size;
+          fs.CopyFrom(Clip.FileStream, Clip.FileStream.Size - SizeOf(Integer));
+          inc(Count);
+          inc(bmCount, Clip.FrameList.Count);
+
+          fs.Position:= c_start;
+          While fs.Position < fs.Size-50 do
+          begin
+            fs.Read(Nr, SizeOf(Integer));  //- FrameNr
+            If sc > 0 then
+            begin
+              fs.Position:= fs.Position - SizeOf(Integer);
+              inc(Nr, sc);
+              fs.Write(Nr, SizeOf(Integer));
+            end;
+            fs.Seek(SizeOf(Integer), soFromCurrent); //- BitInt
+            fs.Read(b, SizeOf(Byte));
+            if b > 0 then                  //- Title
+            begin
+              SetLength(title, b div 2);
+              fs.Read(title[1], b);
+              Bookmarks.Add(IntToStr(Nr) + '= ' + title);
+            end
+            else Bookmarks.Add(IntToStr(Nr) + '= ');
+            fs.Read(e, SizeOf(Integer));     //- ImageSize
+            fs.Seek(e, soFromCurrent);
+          end;
+          sc:= sc + c;
+
+        end;
+
+        s:= '#Clips bookmarks'#13 + '#Bookmarks: ';
+        Bookmarks.CustomSort(SortListFunc_Bookmarks);
+        For i:= 0 to Bookmarks.Count -1 do
+          s:= s + Bookmarks.Names[i] + Bookmarks.ValueFromIndex[i] + ',';
+        s:= s + #13#13 + script + #13#13;
+        For i:= 0 to Count -1 do
+          s:= s + 'script_' + IntToStr(i+1) + '+';
+
+        SetLength(s, Length(s)-1);
+        SL.Clear;
+        SL.Text:= s;
+        SL.SaveToFile(SaveName + '.avs');
+
+        If fileErr <> '' then
+          TThread.Synchronize(nil, procedure
+          begin
+            MessageDlg('Clips not saved.'#13#13+ fileErr,mtInformation, [mbOK],0);
+          end);
+      except
+        RaiseLastOSError;
+        exit;
+      end;
+
+    end);
+
+    TH:= THR.Handle;
+    THR.Priority:= tpHigher;
+    inc(FTaskCount);
+    THR.Start;
+    Repeat
+      Case MsgWaitForMultipleObjectsEx(1, TH, INFINITE, QS_ALLINPUT, 0) of
+        WAIT_OBJECT_0+1: Application.ProcessMessages;
+        else
+          break;
+      end;
+    Until False;
+    dec(FTaskCount);
+
+  finally
+    If Assigned(fs) then
+      fs.Free;
+    SL.Free;
+    Bookmarks.Free;
+    Panel1.Visible:= false;
+    SetCaption();
+    UnblockInput;
+  end;
+
+end;
+
 procedure TForm1.PopupMenuPopup(Sender: TObject);
 begin
   popReOpenSize.Enabled:= CurrentClip.FrameList.Count > 0;
@@ -4586,6 +4819,7 @@ begin
   popOpenLastSavedStream.Enabled:= popOpenLastSavedStream.Count > 0;
   popSaveToStream.Enabled:= CurrentClip.FrameList.Count > 0;
   popRunAvsPAllTabs.Visible:= (fRunProg <> '') and (TabView.Tabs.Count > 1);
+  popClipsToClip.Enabled:= TabView.Tabs.Count > 1;
 end;
 
 procedure TForm1.SendClipToAvsWnd(Sender: TObject);
