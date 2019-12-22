@@ -81,7 +81,7 @@ If this is exceeded, a message is displayed and no further clips are added.
 If requested, this could be changed to perhaps 2000.
 
 Bug:  
-The AvsPmod editor shows no text that is longer than ~ 1000 characters.   
+The AvsPmod editor does not display the line text if a line contains more than ~ 1000 characters. 
 So it may be that the line with the new bookmarks is not displayed. The remedy is to activate the line break.  
 
 Note:  
