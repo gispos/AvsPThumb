@@ -58,9 +58,8 @@ This function can be found under Extras. The function creates a single clip (scr
 Advantages is the minimized memory requirement of Avisynth. 
 
 Prerequisite:  
-1.) Each tab must be an opened bk6 file and the avs file must be in the same directory.  
+1.) Each tab must be an opened (bk6, bk3) file and the avs file must be in the same directory.  
 2.) The video and audio parameters of the clips must match.  
-3.) The thumbnail size of the bk6 files (tabs) must match or the result is not nice.  
 
 What is being done:  
 All bookmark positions of the individual clips are corrected and a bk6 file with the corrected values is created.
@@ -84,6 +83,7 @@ Split Clip
 -------------
 You can split a clip into several tabs. Useful for 'Clips to clip' or a scene division.  
 To much? You can hide the menu under 'Options'->'Hide Clip menu' ;)  
+With 'Auto Split' you can expand the saved splits ('Save current splits') to several tabs  
 If the clip has been split, the following functions are deactivated: 
 Save Favorites, Update Bookmarks and ReOpen Size.  
 
