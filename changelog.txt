@@ -1,3 +1,38 @@
+2.0.4 [08.02.2019]
+- Added:
+    - Tabs shown an indicator if the AvsPmod Window allocated
+    - 'Close all the next tabs'
+    - Save and open tabs as Group (some menus)
+    - Add tab to group (Added the current tab to a selected group)
+    - 'Open Groups folder'
+    - You can jump to the previous selected index with the forward or backward mouse button.
+         - Hint: Is reset when changing the clip or the normal and favorites list.
+    - Tabs can be moved to another position (Don't know is it new ;))
+    - 'Hide Clip menu' (hides the Clip menu, see below)
+
+- Menu 'Clip' is Beta: see Split Clip 
+    - Auto Split  (Expands all saved split points to tabs)
+    - Split  (Splits the selected index to new tab)
+    - Join parts  (Join all splits to one Clip)
+    - Merge with next 
+    - Merge with previous
+    - Sort parts (is automatic called on 'Split')
+    - Save current Splits (Saves in the Bookstream the split points, saves also the selected indexes for each clip)
+
+- Changed:
+    - Tab preview shows now the selected index as preview
+    - 'Clips to clip' can now be created with Bookstreams that contains different Thumbnaile sizes.
+    - 'Clips to clip' saves the split points for each clip. Do can expand the splits with 'Auto Split' see above (Menu 'Clip')
+    - Look in the AvsPThumb.ini, there is an entry 'Tweaks' > 'ClipsToClipTweak' 
+         - When set to 1, 'Clips to clip' doese allow a mix of 1920-16/9 and 1440-4/3 videos. Beta! 
+         - In the avs file an attempt is made to compensate the different aspect ratios. 
+         - I didn't invest much time in it. I am happy to accept better suggestions. Thanks.
+
+Note to Split Clips: 
+  Saving is only possible in new header version 2.0.4, so open your bookstreams (bk3, bk6) with the new version and save it again.
+  'Clips to clip' must be new created for 'Auto Split', or you must select the splits manually and then saved with 'Save current splits'
+----------------------------------------------
+    
 2.0.3 [19.12.2019]
 - New function 'Clips to clip' see readme.
 - New AvsPmod macro 'Fire up' see macros readme

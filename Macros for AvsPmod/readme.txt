@@ -9,6 +9,10 @@ else:
     suffix = '.bk3'
     runFile = '"D:\Tools GPo (x86)\AvsThumb\AvsPThumb.exe" '
 
+Note:
+AvsPThumb.py  does send the current tab.
+AvsPThumb all tabs.py doese send all tabs.
+AvsPThumb bm tabs.py does send only tabs if bookstream file (bk3, bk6) has found.
 --------------------------------------------------------------------------------------------
 
 Fire up.py

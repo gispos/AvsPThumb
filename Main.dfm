@@ -45,7 +45,6 @@ object Form1: TForm1
     Touch.InteractiveGestureOptions = []
     Touch.ParentTabletOptions = False
     Touch.TabletOptions = []
-    OnChange = LVChange
     OnCustomDrawItem = LVCustomDrawItem
     OnData = LVData
     OnDataStateChange = LVDataStateChange
@@ -102,9 +101,32 @@ object Form1: TForm1
     TabIndex = 0
     TabPosition = tpTop
     OnChange = TabViewChange
+    OnDragDrop = TabViewDragDrop
+    OnDragOver = TabViewDragOver
     OnDrawTab = TabViewDrawTab
     OnMouseDown = TabViewMouseDown
     OnMouseMove = TabViewMouseMove
+  end
+  object paMem: TPanel
+    Left = 0
+    Top = 20
+    Width = 90
+    Height = 21
+    BevelOuter = bvNone
+    Caption = 'Mem'
+    Color = clBlack
+    DoubleBuffered = True
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clSilver
+    Font.Height = -11
+    Font.Name = 'Tahoma'
+    Font.Style = []
+    Locked = True
+    ParentBackground = False
+    ParentDoubleBuffered = False
+    ParentFont = False
+    TabOrder = 4
+    Visible = False
   end
   object Panel1: TPanel
     Left = 1
@@ -203,6 +225,10 @@ object Form1: TForm1
       Caption = 'Open last saved stream'
       OnClick = popOpenLastSavedStreamClick
     end
+    object popGroupMenu: TMenuItem
+      Caption = 'Open group'
+      Enabled = False
+    end
     object popUpdateBookmarks: TMenuItem
       Caption = 'Update Bookmarks...'
       OnClick = popUpdateBookmarksClick
@@ -254,90 +280,56 @@ object Form1: TForm1
         OnClick = popZ50Click
       end
       object popZ100Fit: TMenuItem
+        Tag = 1
         Caption = '100 Fit   (F1)'
         OnClick = popZ100FitClick
       end
     end
-    object Option1: TMenuItem
-      AutoHotkeys = maManual
-      Caption = 'Options'
-      object popDefThumbWidth: TMenuItem
-        Caption = 'Default image width...'
-        OnClick = popDefThumbWidthClick
+    object popClipExtraMenu: TMenuItem
+      Caption = 'Clip'
+      OnClick = popClipExtraMenuClick
+      object popAutoSplitClip: TMenuItem
+        Caption = 'Auto Split'
+        OnClick = popAutoSplitClipClick
       end
-      object popReOpenCustomSize: TMenuItem
-        Caption = 'ReOpen custom size...'
-        OnClick = popReOpenCustomSizeClick
-      end
-      object JPEGQuality1: TMenuItem
-        Caption = 'JPEG quality...'
-        OnClick = JPEGQuality1Click
-      end
-      object popBackgroundColor: TMenuItem
-        Caption = 'Background color...'
-        OnClick = popBackgroundColorClick
-      end
-      object N12: TMenuItem
+      object N18: TMenuItem
         Caption = '-'
       end
-      object popMaxHistoryCount: TMenuItem
-        Caption = 'Max file history count...'
-        OnClick = popMaxHistoryCountClick
+      object popSplitClip: TMenuItem
+        Caption = 'Split'
+        OnClick = popSplitClipClick
       end
-      object popClearFileHistory: TMenuItem
-        Caption = 'Clear file history'
-        OnClick = popClearFileHistoryClick
+      object popJoinClipParts: TMenuItem
+        Caption = 'Join parts'
+        OnClick = popJoinClipPartsClick
       end
-      object N7: TMenuItem
+      object N20: TMenuItem
         Caption = '-'
       end
-      object popFormAutoMove: TMenuItem
-        AutoCheck = True
-        Caption = 'Form auto move'
-        Checked = True
+      object popSplitMergeNext: TMenuItem
+        Caption = 'Merge with next'
+        OnClick = popSplitMergeNextClick
       end
-      object popTitleAutoAddFavor: TMenuItem
-        AutoCheck = True
-        Caption = 'Title automatic to favorites'
-        Checked = True
+      object popSplitMergePrev: TMenuItem
+        Caption = 'Merge with previous'
+        OnClick = popSplitMergePrevClick
       end
-      object popShowTitle: TMenuItem
-        AutoCheck = True
-        Caption = 'Show Title'
-      end
-      object popSingleInstance: TMenuItem
-        AutoCheck = True
-        Caption = 'Single Instance'
-        Checked = True
-      end
-      object popAfterSaveToStreamOpenStream: TMenuItem
-        AutoCheck = True
-        Caption = 'After save stream open Stream'
-        Checked = True
-        Visible = False
-      end
-      object N11: TMenuItem
+      object N19: TMenuItem
         Caption = '-'
       end
-      object popAvsPTabsChange: TMenuItem
-        AutoCheck = True
-        Caption = 'Enable AvsP Tabs change'
-        Checked = True
-        Visible = False
+      object popSortClipParts: TMenuItem
+        Caption = 'Sort parts'
+        OnClick = popSortClipPartsClick
       end
-      object popAvsPscrolldiv2: TMenuItem
-        AutoCheck = True
-        Caption = 'AvsP scroll div 2'
-        Checked = True
-      end
-      object popAvsPscrollreverse: TMenuItem
-        AutoCheck = True
-        Caption = 'AvsP scroll reverse'
+      object popSaveCurrentSplits: TMenuItem
+        Caption = 'Store current Splits'
+        OnClick = popSaveCurrentSplitsClick
       end
     end
-    object E1: TMenuItem
+    object popExtraMenu: TMenuItem
       AutoHotkeys = maManual
       Caption = 'Extras'
+      OnClick = popExtraMenuClick
       object SaveDefaultPos1: TMenuItem
         Caption = 'Save default Pos'
         OnClick = SaveDefaultPos1Click
@@ -395,16 +387,112 @@ object Form1: TForm1
         Caption = 'Save Bookmarks (*.cr)'
         OnClick = popSaveBookmarksClick
       end
-      object popClipsToClip: TMenuItem
-        Caption = 'Clips to clip...'
-        OnClick = popClipsToClipClick
+      object N17: TMenuItem
+        Caption = '-'
+      end
+      object popSaveGroup: TMenuItem
+        Caption = 'Save tabs as group...'
+        OnClick = popSaveGroupClick
+      end
+      object popAddTabToGroup: TMenuItem
+        Caption = 'Add tab to group'
+      end
+      object popOpenGroupsFolder: TMenuItem
+        Caption = 'Open Groups folder'
+        OnClick = popOpenGroupsFolderClick
       end
       object N10: TMenuItem
         Caption = '-'
       end
-      object M1: TMenuItem
+      object popClipsToClip: TMenuItem
+        Caption = 'Clips to clip...'
+        OnClick = popClipsToClipClick
+      end
+      object popMoveFrameNr: TMenuItem
         Caption = 'Move frame nr...'
-        OnClick = M1Click
+        OnClick = popMoveFrameNrClick
+      end
+    end
+    object Option1: TMenuItem
+      AutoHotkeys = maManual
+      Caption = 'Options'
+      object popDefThumbWidth: TMenuItem
+        Caption = 'Default image width...'
+        OnClick = popDefThumbWidthClick
+      end
+      object popReOpenCustomSize: TMenuItem
+        Caption = 'ReOpen custom size...'
+        OnClick = popReOpenCustomSizeClick
+      end
+      object JPEGQuality1: TMenuItem
+        Caption = 'JPEG quality...'
+        OnClick = JPEGQuality1Click
+      end
+      object popBackgroundColor: TMenuItem
+        Caption = 'Background color...'
+        OnClick = popBackgroundColorClick
+      end
+      object N12: TMenuItem
+        Caption = '-'
+      end
+      object popMaxHistoryCount: TMenuItem
+        Caption = 'Max file history count...'
+        OnClick = popMaxHistoryCountClick
+      end
+      object popClearFileHistory: TMenuItem
+        Caption = 'Clear file history'
+        OnClick = popClearFileHistoryClick
+      end
+      object N7: TMenuItem
+        Caption = '-'
+      end
+      object popFormAutoMove: TMenuItem
+        AutoCheck = True
+        Caption = 'Form auto move'
+        Checked = True
+      end
+      object popTitleAutoAddFavor: TMenuItem
+        AutoCheck = True
+        Caption = 'Title automatic to favorites'
+        Checked = True
+      end
+      object popShowTitle: TMenuItem
+        AutoCheck = True
+        Caption = 'Show Title'
+      end
+      object popSingleInstance: TMenuItem
+        AutoCheck = True
+        Caption = 'Single Instance'
+        Checked = True
+      end
+      object popHideClipMenu: TMenuItem
+        AutoCheck = True
+        Caption = 'Hide Clip menu'
+        OnClick = popHideClipMenuClick
+      end
+      object popAfterSaveToStreamOpenStream: TMenuItem
+        AutoCheck = True
+        Caption = 'After save stream open Stream'
+        Checked = True
+        Visible = False
+      end
+      object N11: TMenuItem
+        Caption = '-'
+      end
+      object popAvsPTabsChange: TMenuItem
+        AutoCheck = True
+        Caption = 'Enable AvsP Tabs change'
+        Checked = True
+        Visible = False
+      end
+      object popAvsPscrolldiv2: TMenuItem
+        AutoCheck = True
+        Caption = 'AvsP scroll div 2'
+        Checked = True
+      end
+      object popAvsPscrollreverse: TMenuItem
+        AutoCheck = True
+        Caption = 'AvsP scroll reverse'
       end
     end
     object N1: TMenuItem
@@ -471,11 +559,19 @@ object Form1: TForm1
       Caption = 'Close all other tabs'
       OnClick = popCloseOtherTabsClick
     end
+    object popCloseNextTabs: TMenuItem
+      Caption = 'Close all the next tabs'
+      OnClick = popCloseNextTabsClick
+    end
     object N16: TMenuItem
       Caption = '-'
     end
     object popSendTab: TMenuItem
       Caption = 'Send tab to'
+    end
+    object popTabSaveGroup: TMenuItem
+      Caption = 'Save tabs as group...'
+      OnClick = popSaveGroupClick
     end
     object N13: TMenuItem
       Caption = '-'
