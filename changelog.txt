@@ -22,7 +22,7 @@
 - Changed:
     - Tab preview shows now the selected index as preview
     - 'Clips to clip' can now be created with Bookstreams that contains different Thumbnaile sizes.
-    - 'Clips to clip' saves the split points for each clip. Do can expand the splits with 'Auto Split' see above (Menu 'Clip')
+    - 'Clips to clip' saves the split points for each clip. You can expand the splits with 'Auto Split' see above (Menu 'Clip')
     - Look in the AvsPThumb.ini, there is an entry 'Tweaks' > 'ClipsToClipTweak' 
          - When set to 1, 'Clips to clip' doese allow a mix of 1920-16/9 and 1440-4/3 videos. Beta! 
          - In the avs file an attempt is made to compensate the different aspect ratios. 
