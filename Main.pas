@@ -2,7 +2,7 @@
 ----------------------------
   AvsPmod bookmark reader
 
-  GPo 2020.01  v2.0.4
+  GPo 2020.01  v2.0.4.2
 
 ----------------------------
 *)
@@ -5288,7 +5288,8 @@ begin
     fs.Read(e, SizeOf(e));
     If e <> Header2Flag then
     begin
-      MessageDlg('Old header Version'#13+'Cannot save the splits',mtError,[mbOK],0);
+      MessageDlg('Old header Version'#13+'Cannot save the splits'#13#13+
+                 'You must first Join, then save the stream.',mtError,[mbOK],0);
       exit;
     end;
     fs.Read(splitL, SizeOf(splitL));
@@ -6237,7 +6238,7 @@ begin
   popUpdateBookmarks.Enabled:= (CurrentClip.FrameList.Count > 0) and not b;
   popRunAvsP.Enabled:= CurrentClip.FrameList.Count > 0;
   popOpenLastSavedStream.Enabled:= popOpenLastSavedStream.Count > 0;
-  popSaveToStream.Enabled:= CurrentClip.FrameList.Count > 0;
+  popSaveToStream.Enabled:= (CurrentClip.FrameList.Count > 0) and not b;
   popRunAvsPAllTabs.Visible:= (fRunProg <> '') and (TabView.Tabs.Count > 1);
 end;
 

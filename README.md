@@ -1,4 +1,4 @@
-# AvsPThumb 2.0.4
+# AvsPThumb 2.0.4.2
 AvsPmod bookmark reader
 
 - Reads bookmarks saved with AvsPmod in avs script. Also reads a bookmarks list (cr.txt).  
@@ -85,7 +85,7 @@ You can split a clip into several tabs. Useful for 'Clips to clip' or a scene di
 To much? You can hide the menu under 'Options'->'Hide Clip menu' ;)  
 With 'Auto Split' you can expand the saved splits ('Save current splits') to several tabs  
 If the clip has been split, the following functions are deactivated: 
-Save Favorites, Update Bookmarks and ReOpen Size.  
+Save Favorites, Update Bookmarks, SaveToStream and ReOpen Size.  
 
 You can either merge whole part in the menu or merge the selection to another part using drag and drop.  
 Drag and drop:  
