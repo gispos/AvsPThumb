@@ -2,7 +2,7 @@
 ----------------------------
   AvsPmod bookmark reader
 
-  GPo 2020.01  v2.0.4.2
+  GPo 2020.02  Version 2.0.5
 
 ----------------------------
 *)
@@ -339,16 +339,16 @@ type
     procedure CloseTabs(tabs: array of Integer; const CanCloseSplitPart: boolean=False);
     procedure ShowAvsWnd;
     procedure SetCaption(const str: String='');
-    procedure LV_MakeItemVisible(const idx: Integer; const DoSelect: boolean = True);
+    procedure LV_MakeItemVisible(const idx: Integer; const DoSelect: boolean = True;
+      const AddToTop: boolean = False);
     procedure LV_StyleBugFix;
     procedure LV_SaveOrigin;
     procedure ClipsToClip(const SaveName: String);
     function Clip_IndexOfFrameNr(Clip: TClip; const Nr: Integer): Integer; inline;
     procedure Clip_FillFavorLists(Clip: TClip; const CheckTabSet: boolean); inline;
-    //- Split Clips
 
-    procedure SplitClip(idxList: Array of Integer);
-    //- Now SplitMove ~function JoinPart(Clip: TClip; const ClipIsParent: Boolean): TClip;
+    //- Split Clips
+    procedure SplitClip(idxList: Array of Integer; const MakeItemVisible: Integer=0);
     procedure SplitMove(Source: TClip; idx: Integer; prev: boolean);
     function GetSplitFirstClip(Clip: TClip): TClip; inline;
     function IsSplitClip(Clip: TClip): boolean; inline;
@@ -390,9 +390,12 @@ const
   AVSP_CLIP_RETURN = 33000;
 
 {$IFDEF WIN32}
+  {$SetPEFlags IMAGE_FILE_LARGE_ADDRESS_AWARE}
+const
   fext = '.bk3';
   myName = 'AvsPThumb x32';
 {$else}
+const
   fext = '.bk6';
   myName = 'AvsPThumb x64';
 {$endif}
@@ -405,15 +408,12 @@ uses StretchF, FileUtils, Math, GPoUtils, System.Generics.Collections,
      System.Generics.Defaults, System.StrUtils;
 
 {$R *.dfm}
-{$IFDEF WIN32}
-  {$SetPEFlags IMAGE_FILE_LARGE_ADDRESS_AWARE}
-{$endif}
 
 const
-  bookErr: String = 'Bookmark not found';
-  wndErr: String = 'AvsP Wnd not found';
+  bookErr = 'Bookmark not found';
+  wndErr  = 'AvsP Wnd not found';
   //- file extension for group files
-  GroupExt: String = '.grp.txt';
+  GroupExt = '.grp.txt';
 
 var
   VDubWnd: THandle = 0;
@@ -435,16 +435,16 @@ begin
   Result:= memStatus.dwAvailPhys;
 
   {
-  with Memo1.Lines, vGlobalMemoryStatus do
+  with Memo1.Lines, GlobalMemoryStatus do
   begin
-  Add( 'Length: ' + IntToStr(dwLength) );
-  Add( 'MemoryLoad: ' + IntToStr(dwMemoryLoad) );
-  Add( 'TotalPhys: ' + IntToStr(dwTotalPhys) );
-  Add( 'AvailPhys: ' + IntToStr(dwAvailPhys) );
-  Add( 'TotalPageFile: ' + IntToStr(dwTotalPageFile) );
-  Add( 'AvailPageFile: ' + IntToStr(dwAvailPageFile) );
-  Add( 'TotalVirtual: ' + IntToStr(dwTotalVirtual) );
-  Add( 'AvailVirtual: ' + IntToStr(dwAvailVirtual) );
+    Add( 'Length: ' + IntToStr(dwLength) );
+    Add( 'MemoryLoad: ' + IntToStr(dwMemoryLoad) );
+    Add( 'TotalPhys: ' + IntToStr(dwTotalPhys) );
+    Add( 'AvailPhys: ' + IntToStr(dwAvailPhys) );
+    Add( 'TotalPageFile: ' + IntToStr(dwTotalPageFile) );
+    Add( 'AvailPageFile: ' + IntToStr(dwAvailPageFile) );
+    Add( 'TotalVirtual: ' + IntToStr(dwTotalVirtual) );
+    Add( 'AvailVirtual: ' + IntToStr(dwAvailVirtual) );
   end;
   }
 end;
@@ -527,7 +527,6 @@ begin
     LV.Items.BeginUpdate;
     LV.Items.Count:= 0;
     LV.Items.EndUpdate;
-    LV.Scroll(0,0);
     LV_StyleBugFix;
     TabSet.TabIndex:= 0;
   Finally
@@ -1427,21 +1426,29 @@ begin
 end;
 
 //- Bug fix for Delphi Styles
-procedure TForm1.LV_MakeItemVisible(const idx: Integer; const DoSelect: boolean = True);
+procedure TForm1.LV_MakeItemVisible(const idx: Integer; const DoSelect: boolean;
+  const AddToTop: boolean);
 begin
-  if idx > -1 then
-  begin
-    If DoSelect then
-      LV.Items[idx].Selected:= True;
-    LV.Items[idx].MakeVisible(False);
-  end
-  else
-    If Assigned(LV.Selected) then
-      LV.Selected.MakeVisible(False);
-
-  LV_StyleBugFix;
-  If LV.Enabled then
-    LV.SetFocus;
+  LockWindowUpdate(LV.Handle);
+  Try
+    If AddToTop then
+      LV.Items[LV.Items.Count-1].MakeVisible(False);
+    if idx > -1 then
+    begin
+      If DoSelect then
+        LV.Items[idx].Selected:= True;
+      LV.Items[idx].MakeVisible(False);
+    end
+    else
+      If Assigned(LV.Selected) then
+        LV.Selected.MakeVisible(False);
+  finally
+    LockWindowUpdate(0);
+    LV_StyleBugFix;
+    If LV.Enabled then
+      LV.SetFocus;
+    LV.Invalidate;
+  end;
 end;
 
 procedure TForm1.btnStopClick(Sender: TObject);
@@ -1616,8 +1623,9 @@ begin
   TabSet.TabIndex:= 0;
   TabSet.OnChange:= TabSetChange;
   LV.Selected:= nil;
+  LV.Items.BeginUpdate;
   LV.Items.Count:= 0;
-  LV.Scroll(0,0);
+  LV.Items.EndUpdate;
   LV_StyleBugFix;
 
   with CurrentClip do
@@ -2803,8 +2811,8 @@ begin
   }
 
   //- Or remove it, then last scroll pos is used
-  If Assigned(LV.Selected) then
-    LV_MakeItemVisible(-1)  //- Bug fix Delphi Styles
+  If Assigned(LV.Selected) then //- Bring to top if split
+    LV_MakeItemVisible(-1, True, IsSplitClip(CurrentClip))  //- Bug fix Delphi Styles
   else begin
     LV.Enabled:= False;
     LV.Enabled:= True;
@@ -3211,6 +3219,8 @@ var
   Clip: TClip;
   idxLV: Integer;
   addIdx: boolean;
+  tabset_lastidx: Integer;
+  s: String;
 begin
   addIdx:= Byte(GetKeyState(vkControl)) > 100;
 
@@ -3224,34 +3234,54 @@ begin
     For i:= 0 to TabView.Tabs.Count -1 do
     begin
       Clip:= GetClip(i);
-      if Assigned(Clip.FileStream) then
+      if Assigned(Clip.FileStream) then //- also not added on Split clip
       begin
-        //~SL.Add(Clip.LastOpen);
-        //- Test add selected index for OpenGroup
+        tabset_lastidx:= 0;
         If addIdx then
-        Case Clip.TabSet_LastIndex of
-          0: idxLV:= Clip.LastIndexLV;
-          1: idxLV:= Clip.LastIndexFV;
-          2: idxLV:= Clip.LastIndexFV2;
-          else idxLV:= Clip.LastIndexLV;
+        begin
+          If Clip = CurrentClip then
+          begin
+            tabset_lastidx:= TabSet.TabIndex;
+            idxLV:= LV.ItemIndex;
+          end
+          else begin
+            tabset_lastidx:= Clip.TabSet_LastIndex;
+            Case tabset_lastidx of
+              1: idxLV:= Clip.LastIndexFV;
+              2: idxLV:= Clip.LastIndexFV2;
+              else idxLV:= Clip.LastIndexLV;
+            end;
+          end;
         end
         else idxLV:= -1;
-        If idxLV > -1 then
-          SL.Add(Clip.LastOpen+'|'+IntToStr(Clip.TabSet_LastIndex)+','+IntToStr(idxLV))
-        else SL.Add(Clip.LastOpen);
-        //- Test End
+
+        SL.Add(Clip.LastOpen+'|'+IntToStr(tabset_lastidx)+','+IntToStr(idxLV))
       end
       else inc(NoStream);
+
     end;
     if SL.Count > 0 then with SaveDlg do
     begin
       InitialDir:= ProgramPath + 'Groups';
       FileName:= 'New group';
       Filter:= 'Groups (' + GroupExt + ')|*' + GroupExt;
-      If not SaveDlg.Execute(Handle) then
-         exit;
-      SL.SaveToFile(ChangeFileExt(FileName, GroupExt));
+      Options:= Options - [ofOverwritePrompt];
+      Try
+        If not SaveDlg.Execute(Handle) then
+           exit;
+      finally
+        Options:= Options + [ofOverwritePrompt];
+      end;
 
+      s:= ChangeFileExt(RemoveFileExt(FileName), GroupExt);
+      If FileExists(s) then
+      begin
+        If MessageDlg('File allready exists. Override the existing file?',
+                       mtConfirmation, [mbYes, mbNo],0) <> mrYes then
+                         exit;
+      end;
+
+      SL.SaveToFile(s);
       //- read groups new
       SL.Clear;
       FileUtils.GetFileList(ProgramPath + 'Groups','*' + GroupExt,SL,True,False,False);
@@ -3480,7 +3510,7 @@ begin
       begin
         SL[i]:= TrimLeft(SL[i]);
 
-        //- Test ( Select TabSet and LV item eg. D:\MyFavorite.bk6|0,8 )
+        //- Select TabSet and LV item eg. D:\MyFavorite.bk6|0,8 )
         TabIdx:= -1;
         LVidx:= -1;
 
@@ -3498,25 +3528,18 @@ begin
           end;
         end
         else s:= SL[i];
-        //- Test End
 
         If FileExists(s) then
         begin
           LoadFromStream(s);
-          //- Test, select now the items
+          //- select now the items
           if (TabIdx > -1) and (Tabidx < TabSet.Tabs.Count) then
           begin
             TabSet.TabIndex:= TabIdx;
             If (LVidx > -1) and (LVidx < LV.Items.Count) then
-            begin
-              LV.Scroll(0, MaxInt);  //- add top
-              if i = SL.Count -1 then
-                LV_MakeItemVisible(LVidx)
-              else
-                LV.Items[LVidx].Selected:= True;
-            end;
+              LV_MakeItemVisible(LVidx, True, True);
           end;
-          //- Test End
+          //-
         end
         else begin
           inc(Error);
@@ -3598,6 +3621,21 @@ procedure TForm1.AddTabToGroup(Sender: TObject);
  var
   item: TMenuItem;
   SL: TStringList;
+  idx: Integer;
+
+  function SL_IndexOf(const s: String): boolean;
+  var
+    i: Integer;
+  begin
+    For i:= 0 to SL.Count -1 do
+      if SameText(Copy(SL[i], 1, Length(s)), s) then
+      begin
+        Result:= True;
+        exit;
+      end;
+
+    Result:= False;
+  end;
 begin
   If not Assigned(CurrentClip.FileStream) then
   begin
@@ -3618,9 +3656,9 @@ begin
   SL:= TStringList.Create;
   Try
     SL.LoadFromFile(item.Hint);
-    If SL.IndexOf(CurrentClip.LastOpen) < 0 then
+    If not SL_IndexOf(CurrentClip.LastOpen) then
     begin
-      SL.Add(CurrentClip.LastOpen);
+      SL.Add(CurrentClip.LastOpen+'|'+IntToStr(TabSet.TabIndex)+','+IntToStr(LV.ItemIndex));
       SL.SaveToFile(item.Hint);
     end
     else
@@ -4868,10 +4906,25 @@ begin
   end;
 end;
 
+  function C_Sort(List: TStringList; Idx1, Idx2: Integer): Integer;
+  var
+    Clip1,Clip2: TClip;
+    s1,s2: String;
+  begin
+    Clip1:= TClip(Integer(List.Objects[idx1]));
+    Clip2:= TClip(Integer(List.Objects[idx2]));
+
+    //If Form1.IsSplitClip(Clip1) and Form1.IsSplitClip(Clip2) then
+      Result:= CompareStr(Clip1.LastFile, Clip2.LastFile)
+    //else Result:= CompareStr(Clip1.LastOpen, Clip2.LastOpen);
+  end;
+
 procedure TForm1.TabView_SplitSort(Source: TClip);
 var
   Parent,Clip: TClip;
   idx,i,count: Integer;
+  SL: TStringList;
+  s: String;
 begin
   Parent:= GetSplitFirstClip(Source);
   If not Assigned(Parent) then
@@ -4890,13 +4943,28 @@ begin
     If idx + count > TabView.Tabs.Count then
       TabView.Tabs.Move(idx, TabView.Tabs.Count - count);
 
-    idx:= TabView_IndexOfClip(Parent)+1;
+
+    {SL:= TStringList.Create;
+    For i:= 0 to TabView.Tabs.Count-1 do
+      SL.AddObject(TabView.Tabs[i], TabView.Tabs.Objects[i]);
+    SL.CustomSort(@C_Sort);
+
+    TabView.Tabs.Clear;
+    For i:= 0 to SL.Count-1 do
+      TabView.Tabs.AddObject(SL[i], SL.Objects[i]);
+    SL.Free;}
+
+    //idx:= TabView_IndexOfClip(Parent) + 1;
+    count:= 1;
     Clip:= Parent.NextPart;
     While Assigned(Clip) do
     begin
+      idx:= TabView_IndexOfClip(Parent);
       i:= TabView_IndexOfClip(Clip);
-      TabView.Tabs.Move(i, idx);
-      inc(idx);
+      TabView.Tabs.Move(i, idx + count);
+      //idx:= TabView_IndexOfClip(Clip)+1;
+      //s:= s + IntToStr(idx) + ',' + IntToStr(i) + ',' + IntToStr(count) + #13;
+      inc(count);
       Clip:= Clip.NextPart;
     end;
   finally
@@ -4905,6 +4973,7 @@ begin
     TabView_SetTabText();
     SetCaption();
   end;
+  //ShowMessage(s);
 end;
 
 procedure TForm1.popSplitClipClick(Sender: TObject);
@@ -4967,7 +5036,7 @@ begin
 
   If Length(ai) > 0 then
   begin
-    SplitClip(ai);
+    SplitClip(ai,-1);
 
     //- Set the stored selected index for each clip
     If Length(b) > 0 then
@@ -4984,9 +5053,17 @@ begin
         Clip:= Clip.NextPart;
         inc(i);
       end;
-      If Assigned(Clip2) and (Clip2.LastIndexLV > -1) then
-        LV_MakeItemVisible(Clip2.LastIndexLV, True);
-    end;
+      If Assigned(Clip2) and (Clip2.LastIndexLV > -1) and (Clip2 = CurrentClip) then
+      begin
+        FindAvsWnd(0);
+        SplitUpdateWnd(CurrentClip);
+        LV_MakeItemVisible(Clip2.LastIndexLV, True, True);
+        If (LV.ItemIndex > -1) and (LV.ItemIndex < Clip2.FrameList.Count) then
+          PostMessage(Clip2.AvsWnd, AVSP_SET_FRAME_NR, 0, PFrameRec(Clip2.FrameList[LV.ItemIndex])^.FrameNr);
+      end
+      else LV_MakeItemVisible(0, False, True);
+    end
+    else LV_MakeItemVisible(0, False, True);
   end;
 
   If splitErr > 0 then
@@ -4995,7 +5072,7 @@ begin
 end;
 
 //- Must check the range for idx
-procedure TForm1.SplitClip(idxList: Array of Integer);
+procedure TForm1.SplitClip(idxList: Array of Integer; const MakeItemVisible: Integer);
 var
   i,Loop,idx: Integer;
   P: pFrameRec;
@@ -5086,7 +5163,8 @@ begin
       end;
       SetZoom; //- Sets also LV item count
       ListView_SetWidth;
-      LV_MakeItemVisible(0, False);
+      If MakeItemVisible > -1 then
+        LV_MakeItemVisible(MakeItemVisible, False, True);
     end
     else begin
       If (TabView.Tabs.Count > 1) then

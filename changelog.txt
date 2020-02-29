@@ -1,3 +1,6 @@
+2.0.5 [29.02.2020]
+    - Some improvements.
+
 2.0.4.2 [16.02.2020]
     - Disabled 'Save to Stream' if the clip has been split.
 
