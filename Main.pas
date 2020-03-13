@@ -2,7 +2,7 @@
 ----------------------------
   AvsPmod bookmark reader
 
-  GPo 2020.02  Version 2.0.5
+  GPo 2020.03  Version 2.0.6
 
 ----------------------------
 *)
@@ -1376,7 +1376,9 @@ begin
       if (LV.Items.Count > 0) and (CurrentClip.LV_PreveusIndex >= 0) and (CurrentClip.LV_PreveusIndex < LV.Items.Count) then
       begin
         Handled:= True;
-        LV_MakeItemVisible(CurrentClip.LV_PreveusIndex, True);
+        If Byte(GetKeyState(vkControl)) > 100 then // Then do not scroll the LV only show the index in AvsPmod
+          LV.Items[CurrentClip.LV_PreveusIndex].Selected:= True
+        else LV_MakeItemVisible(CurrentClip.LV_PreveusIndex, True);
         double_click:= False;
         LVMouseDown(self, mbLeft, [ssLeft], Mouse.CursorPos.X, Mouse.CursorPos.y);
       end;
@@ -2251,7 +2253,7 @@ begin
     // Set LV_PreveusIndex for mouse event, TabView.OnChange init the index
     If LV_LastActiveList = ActiveList then
     begin
-      If (LV_LastIndex <> LV.ItemIndex) then
+      If (LV_LastIndex <> LV.ItemIndex) and (Byte(getKeyState(VK_CONTROL)) < 100) then
         CurrentClip.LV_PreveusIndex:= LV_LastIndex;
     end;
     LV_LastActiveList:= ActiveList;
@@ -3390,7 +3392,7 @@ begin
     If fileName = '' then with OpenDlg do
     begin
       Filter:= 'All supported files|*.avs;*.cr.txt;*'+fext+'|'+
-               'Avisynht (*.avs)|*.avs|'+
+               'Avisynth (*.avs)|*.avs|'+
                'Bookmarks (*.cr.txt)|*.cr.txt|'+
                'Bookstream (*' + fext +')|*' + fext;
       If CurrentClip.LastFile <> '' then
@@ -3621,7 +3623,6 @@ procedure TForm1.AddTabToGroup(Sender: TObject);
  var
   item: TMenuItem;
   SL: TStringList;
-  idx: Integer;
 
   function SL_IndexOf(const s: String): boolean;
   var
@@ -4211,7 +4212,7 @@ var
   SL: TStringList;
 begin
   //- disable AvsP custom handler..
-  //-if not single instance, next Avs Thumb must get the handles again
+  //- if not single instance, next AvsThumb must get the handles again
   SL:= TStringList.Create;
   Try
     Try
@@ -4587,7 +4588,6 @@ begin
     Try
       fs:= TFileStream.Create(filename, fmCreate);
       fs.Size:= 0;
-      //~fs.Write(HeaderFlag, SizeOf(Integer));
 
       If CurrentClip.Splits <> '' then
         splitsL:= Length(CurrentClip.Splits)*2
@@ -4669,11 +4669,6 @@ begin
     NewClip(fileName)
   else Clear();
   ActiveList:= CurrentClip.FrameList;
-
-  //~ test, nach Update bookstream werden die thumbs hin und wieder nicht gleich angezeigt
-  // Gefunden, bei Clear wurde die ActiveList nicht auf CurrentClip.FrameList gesetzt
-  //GetCurrentClip;
-  //ActiveList:= CurrentClip.FrameList;
 
   BlockInput;
   SetCaption('Load from Stream...');
@@ -4906,25 +4901,10 @@ begin
   end;
 end;
 
-  function C_Sort(List: TStringList; Idx1, Idx2: Integer): Integer;
-  var
-    Clip1,Clip2: TClip;
-    s1,s2: String;
-  begin
-    Clip1:= TClip(Integer(List.Objects[idx1]));
-    Clip2:= TClip(Integer(List.Objects[idx2]));
-
-    //If Form1.IsSplitClip(Clip1) and Form1.IsSplitClip(Clip2) then
-      Result:= CompareStr(Clip1.LastFile, Clip2.LastFile)
-    //else Result:= CompareStr(Clip1.LastOpen, Clip2.LastOpen);
-  end;
-
 procedure TForm1.TabView_SplitSort(Source: TClip);
 var
   Parent,Clip: TClip;
   idx,i,count: Integer;
-  SL: TStringList;
-  s: String;
 begin
   Parent:= GetSplitFirstClip(Source);
   If not Assigned(Parent) then
@@ -4941,39 +4921,27 @@ begin
 
     idx:= TabView_IndexOfClip(Parent);
     If idx + count > TabView.Tabs.Count then
-      TabView.Tabs.Move(idx, TabView.Tabs.Count - count);
+    begin
+       TabView.Tabs.Move(idx, TabView.Tabs.Count - count);
+       idx:= TabView_IndexOfClip(Parent);
+    end;
 
-
-    {SL:= TStringList.Create;
-    For i:= 0 to TabView.Tabs.Count-1 do
-      SL.AddObject(TabView.Tabs[i], TabView.Tabs.Objects[i]);
-    SL.CustomSort(@C_Sort);
-
-    TabView.Tabs.Clear;
-    For i:= 0 to SL.Count-1 do
-      TabView.Tabs.AddObject(SL[i], SL.Objects[i]);
-    SL.Free;}
-
-    //idx:= TabView_IndexOfClip(Parent) + 1;
-    count:= 1;
     Clip:= Parent.NextPart;
     While Assigned(Clip) do
     begin
-      idx:= TabView_IndexOfClip(Parent);
       i:= TabView_IndexOfClip(Clip);
-      TabView.Tabs.Move(i, idx + count);
-      //idx:= TabView_IndexOfClip(Clip)+1;
-      //s:= s + IntToStr(idx) + ',' + IntToStr(i) + ',' + IntToStr(count) + #13;
-      inc(count);
+      If i > idx then
+        inc(idx);
+      TabView.Tabs.Move(i, idx);
       Clip:= Clip.NextPart;
     end;
+
   finally
     UnblockInput;
     TabView_SetTabIndex(TabView_IndexOfClip(Source));
     TabView_SetTabText();
     SetCaption();
   end;
-  //ShowMessage(s);
 end;
 
 procedure TForm1.popSplitClipClick(Sender: TObject);
@@ -5621,7 +5589,6 @@ begin
 {$else}
       Caption:= 'Avisynth_64 in progress...';
 {$endif}
-      //Screen.Cursor:= crHourGlass;
       Application.ProcessMessages;
     end;
 
@@ -5754,7 +5721,6 @@ begin
       if i > -1 then
         TabSet.Tabs.Delete(i);
     end;
-    //Screen.Cursor:= crDefault;
     If CurrentClip.FrameList.Count > 0 then
       SetCaption()
     else Clear();
@@ -5878,14 +5844,17 @@ var
   P: PFrameRec;
 begin
   Result:= 0;
+
   mem:= TMemoryStream.Create;
   mem.Write(Header2Flag, SizeOf(Integer));
   if CurrentClip.Splits <> '' then
     splitsL:= Length(CurrentClip.Splits)*2
   else splitsL:= 0;
   mem.Write(splitsL, SizeOf(Integer));
+
   jpg:= TJPEGImage.Create;
   jpg.CompressionQuality:= FJPEGQuality;
+
   Try
     Try
       With CurrentClip.FileStream do
@@ -5893,8 +5862,7 @@ begin
         Position:= 0;
         Read(e, SizeOf(Integer));
         If e = Header2Flag then
-          Read(splitsL, SizeOf(Integer))
-        else splitsL:= 0;
+          Seek(SizeOf(Integer), soFromCurrent);
 
         While Position < Size - (50 + splitsL) do
         begin
@@ -5944,6 +5912,13 @@ begin
           inc(Result)
         end;
       end;
+
+      If splitsL > 0 then
+      begin
+        mem.Position:= mem.Size;
+        mem.Write(CurrentClip.Splits[1], splitsL);
+      end;
+
     except
       RaiseLastOSError;
       exit;
@@ -5991,7 +5966,6 @@ var
   start,count, splitL: Integer;
   b: Byte;
 begin
-  //Result:= 0;
   If Assigned(CurrentClip.FileStream) and direct then
   Try
     With CurrentClip.FileStream do
@@ -6019,7 +5993,6 @@ begin
           Position:= start;
           Write(Nr, SizeOf(Integer));
           Position:= start + count;
-          //~inc(Result)
         end
         else Position:= start + count;
       end;
@@ -6233,7 +6206,7 @@ begin
           s:= s + Bookmarks.Names[i] + Bookmarks.ValueFromIndex[i] + ',';
         s:= s + #13#13 + script + #13#13;
 
-        //-Force Full HD 16/9 on 4/3 clips and Assume same FPS and kill audio
+        //- Force Full HD 16/9 on 4/3 clips and Assume same FPS and kill audio
         If FClipsToClipTweak then
         begin
           For i:= 0 to Count -1 do
