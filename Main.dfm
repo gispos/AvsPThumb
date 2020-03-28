@@ -222,6 +222,7 @@ object Form1: TForm1
       end
     end
     object popOpenLastSavedStream: TMenuItem
+      AutoHotkeys = maManual
       Caption = 'Open last saved stream'
       OnClick = popOpenLastSavedStreamClick
     end
@@ -338,26 +339,21 @@ object Form1: TForm1
         Caption = 'Reset to default Pos   (F2)'
         OnClick = popResetDefaultPosClick
       end
-      object N2: TMenuItem
+      object N14: TMenuItem
         Caption = '-'
       end
-      object popThemes: TMenuItem
-        AutoHotkeys = maManual
-        Caption = 'Themes'
-        object popStyle_0: TMenuItem
-          AutoCheck = True
-          AutoHotkeys = maManual
-          Caption = 'Windows'
-          Checked = True
-          Hint = 'Windows'
-          RadioItem = True
-          OnClick = popStyle_0Click
-        end
-        object N15: TMenuItem
-          Caption = '-'
-        end
+      object popSaveGroup: TMenuItem
+        Caption = 'Save tabs as group...'
+        OnClick = popSaveGroupClick
       end
-      object N14: TMenuItem
+      object popAddTabToGroup: TMenuItem
+        Caption = 'Add tab to group'
+      end
+      object popOpenGroupsFolder: TMenuItem
+        Caption = 'Open groups folder'
+        OnClick = popOpenGroupsFolderClick
+      end
+      object N17: TMenuItem
         Caption = '-'
       end
       object popSortFavorites: TMenuItem
@@ -386,20 +382,6 @@ object Form1: TForm1
       object popSaveBookmarks: TMenuItem
         Caption = 'Save Bookmarks (*.cr)'
         OnClick = popSaveBookmarksClick
-      end
-      object N17: TMenuItem
-        Caption = '-'
-      end
-      object popSaveGroup: TMenuItem
-        Caption = 'Save tabs as group...'
-        OnClick = popSaveGroupClick
-      end
-      object popAddTabToGroup: TMenuItem
-        Caption = 'Add tab to group'
-      end
-      object popOpenGroupsFolder: TMenuItem
-        Caption = 'Open Groups folder'
-        OnClick = popOpenGroupsFolderClick
       end
       object N10: TMenuItem
         Caption = '-'
@@ -432,12 +414,35 @@ object Form1: TForm1
         Caption = 'Background color...'
         OnClick = popBackgroundColorClick
       end
+      object N2: TMenuItem
+        Caption = '-'
+      end
+      object popThemes: TMenuItem
+        AutoHotkeys = maManual
+        Caption = 'Themes'
+        object popStyle_0: TMenuItem
+          AutoCheck = True
+          AutoHotkeys = maManual
+          Caption = 'Windows'
+          Checked = True
+          Hint = 'Windows'
+          RadioItem = True
+          OnClick = popStyle_0Click
+        end
+        object N15: TMenuItem
+          Caption = '-'
+        end
+      end
       object N12: TMenuItem
         Caption = '-'
       end
       object popMaxHistoryCount: TMenuItem
         Caption = 'Max file history count...'
         OnClick = popMaxHistoryCountClick
+      end
+      object popCleanUpHistory: TMenuItem
+        Caption = 'Clean up file history'
+        OnClick = popCleanUpHistoryClick
       end
       object popClearFileHistory: TMenuItem
         Caption = 'Clear file history'
@@ -575,6 +580,10 @@ object Form1: TForm1
     end
     object N13: TMenuItem
       Caption = '-'
+    end
+    object popReleaseVideoMemory: TMenuItem
+      Caption = 'Release video memory'
+      OnClick = popReleaseVideoMemoryClick
     end
     object popShowPreview: TMenuItem
       AutoCheck = True

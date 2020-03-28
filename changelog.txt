@@ -1,3 +1,16 @@
+
+2.0.7 [28.03.2020]
+- Added:
+    - Options > 'Clean up file history' (removes all invalid entries from the history)
+    - Indicator if Bookmark in the Basket (* asterik is shown)
+    - Tab popup 'Release video memory' AvsPmod releases the script video memory if the tab (script) has found.
+    - When closing a Tab with 'Close tab' and CTRL is pressed, AvsPmod closes also the tab.
+    - Hold the previous index on index change (Press CTRL)
+        - With the mouse forward or back button you can switch between the current and previous index.
+        - First click on the new index, the previuse index is assigned, then you can press CTRL and clicking (change) another Index.
+        - If CTRL is pressed while clicking on a new index, the first index is retained and can be selected again with the forward or back mouse button.
+- some improvements
+
 2.0.6 [11.03.2020]
     - Bugfix, 'Sort Clips' if Split Clip
     - Bugfix, 'Update Bookmarks' if Split Clip
