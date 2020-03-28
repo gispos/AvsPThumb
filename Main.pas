@@ -353,7 +353,7 @@ type
     procedure ClipsToClip(const SaveName: String);
     function Clip_IndexOfFrameNr(Clip: TClip; const Nr: Integer): Integer; inline;
     procedure Clip_FillFavorLists(Clip: TClip; const CheckTabSet: boolean); inline;
-
+    function Clip_CanClose(const aClip: TClip = nil; const ShowDlg: boolean=False): String;
     //- Split Clips
     procedure SplitClip(idxList: Array of Integer; const MakeItemVisible: Integer=0);
     procedure SplitMove(Source: TClip; idx: Integer; prev: boolean);
