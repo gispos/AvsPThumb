@@ -390,6 +390,13 @@ object Form1: TForm1
         Caption = 'Clips to clip...'
         OnClick = popClipsToClipClick
       end
+      object popClipsToClipAddClip: TMenuItem
+        Caption = 'Clips to clip add clip...'
+        OnClick = popClipsToClipAddClipClick
+      end
+      object N21: TMenuItem
+        Caption = '-'
+      end
       object popMoveFrameNr: TMenuItem
         Caption = 'Move frame nr...'
         OnClick = popMoveFrameNrClick

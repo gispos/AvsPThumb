@@ -1,4 +1,14 @@
-
+2.0.8 [02.05.2020]
+- Changed:
+    - Index history (prev Index, mouse browse buttons) is now stored for each Clip. Also retained on tab change.
+    - 'Store current splits' and 'Clips to clip' saves now both indexes (current and prev)
+- Index history (current, previous index):
+    - On each selection the history saves (changed) the current and prev index
+    - If you Press CTRL on selecting a new index, the history is not changed (does not save a new index)
+    - Have you changed the index with CTRL and you would add this index to the history, press left and middle mouse together
+    - If you Press CTRL and the mouse browse button, the history switches to the next index but the ListView doesn't scroll
+- some improvements
+      
 2.0.7 [28.03.2020]
 - Added:
     - Options > 'Clean up file history' (removes all invalid entries from the history)
@@ -52,7 +62,7 @@
          - I didn't invest much time in it. I am happy to accept better suggestions. Thanks.
 
 Note to Split Clips: 
-  Saving is only possible in new header version 2.0.4, so open your bookstreams (bk3, bk6) with the new version and save it again.
+  Saving is only possible above header version 2.0.3, so open your bookstreams (bk3, bk6) with the new version and save it again.
   'Clips to clip' must be new created for 'Auto Split', or you must select the splits manually and then saved with 'Save current splits'
 ----------------------------------------------
     

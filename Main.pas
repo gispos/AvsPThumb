@@ -3,7 +3,7 @@
 
   AvsPThumb, bookmark reader for AvsPmod
 
-  GPo 2020.03.25  Version 2.0.7
+  GPo 2020.04.01  Version 2.0.8
 
 ################################################################################
 *)
@@ -47,6 +47,8 @@ type
 
   TNeedSave = Set of (fFavor, fStream);
 
+  TFrameHistory = Array[0..3] of pFrameRec;
+
   TClip = class
     NextPart: TClip;
     PrevPart: TClip;
@@ -61,7 +63,8 @@ type
     AR: Single;
     LastViewOriginLV, LastViewOriginFV, LastViewOriginFV2: TPoint;
     LastIndexLV, LastIndexFV, LastIndexFV2: Integer;
-    LV_PreveusIndex: Integer;
+    FrameHistory: TList;
+    LastHistoryIdx: Integer;
     LastOpen: String;
     LastFile: String;
     AvsWnd: THandle;
@@ -187,6 +190,8 @@ type
     popHideClipMenu: TMenuItem;
     popCleanUpHistory: TMenuItem;
     popReleaseVideoMemory: TMenuItem;
+    popClipsToClipAddClip: TMenuItem;
+    N21: TMenuItem;
     procedure LVSelectItem(Sender: TObject; Item: TListItem;
       Selected: Boolean);
     procedure FormCreate(Sender: TObject);
@@ -271,6 +276,7 @@ type
     procedure popHideClipMenuClick(Sender: TObject);
     procedure popCleanUpHistoryClick(Sender: TObject);
     procedure popReleaseVideoMemoryClick(Sender: TObject);
+    procedure popClipsToClipAddClipClick(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
     procedure AppOnMessages(var Msg: TMsg; var Handled: Boolean);
@@ -328,7 +334,7 @@ type
     function GetClipFromAddr(const int: Integer): TClip;
     function TabView_IndexOfClip(Clip: TClip): Integer; inline;
     function TabView_IndexOfFrameList(FrameList: TList; const FindFrameNr: Integer =-1): TClipIdx; inline;
-    procedure TabView_SetTabIndex(const idx: Integer);
+    procedure TabView_SetTabIndex(const idx: Integer; const disableForceAvsWND: boolean = False);
     procedure TabView_SplitSort(Source: TClip);
     procedure FavorLists_Clear(const Clip: TClip=nil);
     function LoadBookmarksFromFile(const fileName: String; FrList,FavList: TList): Integer;
@@ -350,7 +356,9 @@ type
       const AddToTop: boolean = False);
     procedure LV_StyleBugFix;
     procedure LV_SaveOrigin;
+    //
     procedure ClipsToClip(const SaveName: String);
+    procedure ClipsToClipAddClip(const avsClipsFile: String; Clip: TClip);
     function Clip_IndexOfFrameNr(Clip: TClip; const Nr: Integer): Integer; inline;
     procedure Clip_FillFavorLists(Clip: TClip; const CheckTabSet: boolean); inline;
     function Clip_CanClose(const aClip: TClip = nil; const ShowDlg: boolean=False): String;
@@ -364,6 +372,8 @@ type
     procedure SplitsSetCaption(Source: TClip);
     //-
     //~function Clips_IndexOfAvsWnd(const hWnd : THandle): Integer;
+    function FrameHistoryFind(Clip: TClip; next: boolean): Integer;
+    procedure FrameHistoryAdd(Clip: TClip; LV_Index: Integer);
   end;
 
   {
@@ -407,6 +417,10 @@ const
   fext = '.bk6';
   myName = 'AvsPThumb x64';
 {$endif}
+
+
+ // return Name as FrameNr and Title as Value (Nr=Title)
+function BookmarksFromFile(const fileName: String; SL: TStringList): Integer;
 
 var
   Form1: TForm1;
@@ -484,8 +498,9 @@ begin
   LastIndexLV:= -1;
   LastIndexFV:= -1;
   LastIndexFV2:= -1;
-  LV_PreveusIndex:= -1;
   TabSet_LastIndex:= 0;
+  FrameHistory:= TList.Create;
+  LastHistoryIdx:= -1;
   AvsWnd:= 0;
   AvsP_video_w:= -1;
   AvsP_video_h:= -1;
@@ -511,6 +526,7 @@ begin
   FrameList.Free;
   FavorList.Free;
   Favor2List.Free;
+  FrameHistory.Free;
   inherited Destroy;
 end;
 
@@ -568,6 +584,51 @@ begin
      end;
    end;
    Result:= nil;
+end;
+
+function TForm1.FrameHistoryFind(Clip: TClip; next: boolean): Integer;
+var
+  idx: Integer;
+begin
+  idx:= Clip.LastHistoryIdx;
+  Result:= -1;
+  If next then
+  begin
+    inc(idx);
+    if idx >= Clip.FrameHistory.Count then
+      idx:= 0;
+  end
+  else begin
+    dec(idx);
+    if idx < 0 then
+      idx:= Clip.FrameHistory.Count-1;
+  end;
+
+  If Assigned(Clip.FrameHistory[idx]) then
+    Result:= ActiveList.IndexOf(Clip.FrameHistory[idx]);
+  If Result > -1 then
+    Clip.LastHistoryIdx:= idx;
+end;
+
+procedure TForm1.FrameHistoryAdd(Clip: TClip; LV_Index: Integer);
+begin
+  With Clip.FrameHistory do
+  begin
+    if IndexOf(ActiveList[LV_Index]) > -1 then
+      exit;
+    If Clip.LastHistoryIdx < 1 then  // del last item
+    begin
+      Clip.LastHistoryIdx:= 0;
+      Insert(0, ActiveList[LV_Index]);
+      If Count > 2 then
+        Delete(Count-1);
+    end
+    else begin                             // del first item
+      Clip.LastHistoryIdx:= Add(ActiveList[LV_Index]);
+      If Count > 2 then
+        Delete(0);
+    end;
+  end;
 end;
 
 {
@@ -1015,13 +1076,19 @@ begin
   TabView_SetTabText(TabView_IndexOfClip(CurrentClip));
 end;
 
-procedure TForm1.TabView_SetTabIndex(const idx: Integer);
+procedure TForm1.TabView_SetTabIndex(const idx: Integer; const disableForceAvsWND: boolean);
 var
-  b: boolean;
+  b,df: boolean;
 begin
+  df:= popForceAvsPWnd.Checked;
+  If disableForceAvsWND then
+    popForceAvsPWnd.Checked:= False;
+
   If (TabView.TabIndex = idx) or (idx < 0) or (idx >= TabView.Tabs.Count)  then
     TabViewChange(Self, TabView.TabIndex, b)
   else TabView.TabIndex:= idx;
+
+  popForceAvsPWnd.Checked:= df;
 end;
 
 //- test only
@@ -1052,7 +1119,7 @@ end;
 
 procedure TForm1.WndProc(var Message: TMessage);
 var
-  Handled: Boolean;
+  Handled, b: Boolean;
   i: Integer;
   Clip: TClip;
   clipIdx: TClipIdx;
@@ -1157,13 +1224,22 @@ begin
                 clipIdx:= SplitFindFrameNr(clipIdx.Clip, Integer(Message.WParam));
                 If clipIdx.FrameIdx < 0 then
                   exit;
+                //- removed, disabled popForceAvsPWnd.Checked
+                {Case clipIdx.TabSetIdx of  //- OnTabChange changes the index so we set it bevor
+                  0: clipIdx.Clip.LastIndexLV:= clipIdx.FrameIdx;
+                  1: clipIdx.Clip.LastIndexFV:= clipIdx.FrameIdx;
+                  2: clipIdx.Clip.LastIndexFV2:= clipIdx.FrameIdx;
+                end; }
               end
               else if clipIdx.FrameIdx < 0 then
                 exit;
 
-              TabView.TabIndex:= clipIdx.TabViewIdx;
-              TabSet.TabIndex:= clipIdx.TabSetIdx;
+              b:= popForceAvsPWnd.Checked;
+              popForceAvsPWnd.Checked:= false;
+              clipIdx.Clip.TabSet_LastIndex:= clipIdx.TabSetIdx;
+              TabView_SetTabIndex(clipIdx.TabViewIdx);
               LV_MakeItemVisible(clipIdx.FrameIdx, True);
+              popForceAvsPWnd.Checked:= b
             end;
           end;
         except
@@ -1316,6 +1392,8 @@ begin
 end;}
 
 procedure TForm1.AppOnMessages(var Msg: TMsg; var Handled: Boolean);
+var
+  i: Integer;
 begin
   Handled:= false;
   If FInProgress then
@@ -1375,18 +1453,23 @@ begin
     else if (Msg.message = WM_MBUTTONDOWN) and (Msg.hwnd = LV.Handle) then
     begin
       Handled:= True;
+      If Byte(GetKeyState(VK_LBUTTON)) > 100 then //- then OnLVMouseDown function FrameHistoryAdd is used
+        exit;
       FindAvsWnd(800); //- only block the App for a short time
       if CurrentClip.AvsWnd > 0 then
         PostMessage(CurrentClip.AvsWnd, AVSP_INFORM, Handle, AVSP_GET_FRAME_NR);
     end
     else if (Msg.message = WM_XBUTTONDOWN) and (Msg.hwnd = LV.Handle) then
     begin
-      if (LV.Items.Count > 0) and (CurrentClip.LV_PreveusIndex >= 0) and (CurrentClip.LV_PreveusIndex < LV.Items.Count) then
+      Handled:= True;
+      if (LV.Items.Count > 0) and (CurrentClip.FrameHistory.Count > 0) then
       begin
-        Handled:= True;
+        i:= FrameHistoryFind(CurrentClip, true);
+        If i < 0 then
+          exit;
         If Byte(GetKeyState(vkControl)) > 100 then // Then do not scroll the LV only show the index in AvsPmod
-          LV.Items[CurrentClip.LV_PreveusIndex].Selected:= True
-        else LV_MakeItemVisible(CurrentClip.LV_PreveusIndex, True);
+          LV.Items[i].Selected:= True
+        else LV_MakeItemVisible(i, True, IsSplitClip(CurrentClip));
         double_click:= False;
         LVMouseDown(self, mbLeft, [ssLeft], Mouse.CursorPos.X, Mouse.CursorPos.y);
       end;
@@ -1681,6 +1764,25 @@ begin
   else beep;
 end;
 
+procedure TForm1.popClipsToClipAddClipClick(Sender: TObject);
+
+begin
+  With OpenDlg do
+  begin
+    Options:= Options - [ofAllowMultiSelect];
+    Try
+      Filter:= 'Avisynth (.avs)|*.avs';
+      FileName:= '';
+      InitialDir:= ExtractFilePath(CurrentClip.LastOpen);
+      If not Execute() then
+        exit;
+    finally
+      Options:= Options + [ofAllowMultiSelect];
+    end;
+  end;
+  ClipsToClipAddClip(OpenDlg.FileName,CurrentClip);
+end;
+
 procedure TForm1.Clear();
 var
   i: Integer;
@@ -1707,7 +1809,8 @@ begin
   begin
     FavorLists_Clear(CurrentClip);
     NeedSave:= [];
-    LV_PreveusIndex:= -1;
+    FrameHistory.Clear;
+    LastHistoryIdx:= -1;
     If Assigned(FileStream) then
       FileStream.Free;
     FileStream:= nil;
@@ -1755,23 +1858,20 @@ end;
 procedure TForm1.popClipExtraMenuClick(Sender: TObject);
 var
   idx: Integer;
+  Clip: TClip;
 begin
   //- do not get split indexes from the FavorLits, indexes only valid from the FrameList
   If Assigned(LV.Selected) and (TabSet.TabIndex = 0) then
     idx:= LV.Selected.Index
   else idx:= -1;
-
-  popAutoSplitClip.Enabled:= (CurrentClip.Splits <> '') and not IsSplitClip(CurrentClip);
+  Clip:= GetSplitFirstClip(CurrentClip);
+  popAutoSplitClip.Enabled:= (CurrentClip.Splits <> '') or (Assigned(Clip) and (Clip.Splits <> ''));
   popSplitClip.Enabled:= idx > 0; //- min two frames, and index from the FrameList
-  popJoinClipParts.Enabled:= IsSplitClip(CurrentClip);
-  popSortClipParts.Enabled:= popJoinClipParts.Enabled;
-  popSaveCurrentSplits.Enabled:= popJoinClipParts.Enabled or (CurrentClip.Splits <> '');
+  popJoinClipParts.Enabled:= Assigned(Clip);
+  popSortClipParts.Enabled:= Assigned(Clip);
+  popSaveCurrentSplits.Enabled:= Assigned(Clip);
   popSplitMergeNext.Enabled:= Assigned(CurrentClip.NextPart);
-                              //and Assigned(CurrentClip.PrevPart);
   popSplitMergePrev.Enabled:= Assigned(CurrentClip.PrevPart);
-
-
-  //~popEditSplits.Enabled:= CurrentClip.FrameList.Count > 1;
 end;
 
 procedure TForm1.popClipsToClipClick(Sender: TObject);
@@ -2241,7 +2341,7 @@ begin
   begin
     If Strg then
     begin
-      RemoveBit(PFrameRec(CurrentClip.FavorList[Sel])^.BitInt, 2);
+      RemoveBit(PFrameRec(CurrentClip.Favor2List[Sel])^.BitInt, 2);
       CurrentClip.Favor2List.Delete(Sel);
       include(CurrentClip.NeedSave, fFavor); //- include Basket
       LV.Items.BeginUpdate;
@@ -2334,11 +2434,6 @@ var
   wt: Integer;
   THR: TThread;
   TH: THandle;
-{$J+}
-const
-  LV_LastIndex: Integer = -1;
-  LV_LastActiveList: TList= nil;
-{$J-}
 
 begin
   //- stored for mouse move
@@ -2354,7 +2449,7 @@ begin
   If FInProgress then
     exit;
 
-  LeftDown := getKeyState(VK_LBUTTON) < 0; //- left down is only fired up on button down and mouse move
+  LeftDown:= getKeyState(VK_LBUTTON) < 0; //- left down is only fired up on button down and mouse move
   if (Button = mbRight) and not LeftDown then
      PopupMenu.Popup(Mouse.CursorPos.X,Mouse.CursorPos.Y)
   else begin
@@ -2362,17 +2457,10 @@ begin
     if not Assigned(LV.Selected) then
       exit;
 
-    // Set LV_PreveusIndex for mouse event, TabView.OnChange init the index
-    If LV_LastActiveList = ActiveList then
-    begin
-      If (LV_LastIndex <> LV.ItemIndex) and (Byte(getKeyState(VK_CONTROL)) < 100) then
-        CurrentClip.LV_PreveusIndex:= LV_LastIndex;
-    end;
-    LV_LastActiveList:= ActiveList;
-    LV_LastIndex:= LV.ItemIndex;
+    if LeftDown and (Byte(getKeyState(VK_MBUTTON)) > 100) then
+      FrameHistoryAdd(CurrentClip, LV.ItemIndex);
 
-    // Test
-    {
+    { // Test
     if FindVDubWnd then
     begin
       //PostMessage(VDubWnd, WM_USER, Integer(PChar('SetRangeFrames(1000,1200)')), 0);
@@ -2615,8 +2703,13 @@ end;
 procedure TForm1.LVSelectItem(Sender: TObject; Item: TListItem;
   Selected: Boolean);
 begin
-  If LV.SelCount = 1 then
+  If (LV.SelCount = 1) and Selected then
+  begin
     SItemIndex:= LV.ItemIndex;
+    If Byte(GetKeyState(VK_CONTROL))> 100 then // only select and change the bookmark
+      exit;
+    FrameHistoryAdd(CurrentClip, LV.ItemIndex);
+  end;
 end;
 
 procedure TForm1.LVStartDrag(Sender: TObject; var DragObject: TDragObject);
@@ -2737,8 +2830,7 @@ begin
     LV.Enabled:= True;
     LV.SetFocus;
   end;
-  //- Reset LV_PreveusIndex to current index
-  CurrentClip.LV_PreveusIndex:= LV.ItemIndex;
+
   LV.Invalidate;
 end;
 
@@ -2847,7 +2939,6 @@ begin
   LV.ClearSelection;
   TabSet.OnChange:= nil;
   CurrentClip:= Clip;
-  CurrentClip.LV_PreveusIndex:= -1;
 
   Try
     i:= TabSet.Tabs.IndexOf('Basket');
@@ -2901,7 +2992,7 @@ begin
     end;
   Finally
     TabSet.TabIndex:= Clip.TabSet_LastIndex;
-    TabSet.OnChange:= TabSetChange;;
+    TabSet.OnChange:= TabSetChange;
   End;
 
   AllowChange:= True;
@@ -2927,12 +3018,13 @@ begin
   //- Or remove it, then last scroll pos is used
   If Assigned(LV.Selected) then //- Bring to top if split
     LV_MakeItemVisible(-1, True, IsSplitClip(CurrentClip))  //- Bug fix Delphi Styles
+  else if IsSplitClip(CurrentClip) then  //- Set top index if nothing selected
+    LV_MakeItemVisible(0, False, True)
   else begin
     LV.Enabled:= False;
     LV.Enabled:= True;
     LV.SetFocus;
   end;
-  CurrentClip.LV_PreveusIndex:= LV.ItemIndex;
 
   //- force do bring the AvsP Wnd to front
   //- doesn't force to find the AvsP Wnd, force to find wnd only on LV mouse down event
@@ -3541,6 +3633,8 @@ begin
       If SameText(ExtractFileExt(aFiles[i]), fext) then
       begin
         LoadFromStream(aFiles[i]);
+        If FStop then
+          break;
         Continue;
       end;
 
@@ -3550,6 +3644,8 @@ begin
       begin
         if errFile = '' then errFile:= 'Avs file not found:'#13#13;
         errFile:= errFile + avs+#13;
+        If FStop then
+          break;
         Continue;
       end;
 
@@ -3576,6 +3672,8 @@ begin
       else begin
         //~FLastFile:= '';
       end;
+      If FStop then
+        break;
     end;
 
     //- Remove last empty clip
@@ -3602,10 +3700,11 @@ begin
       i:= FHistoryList.IndexOf(item.Hint);
       if i > -1 then
         FHistoryList.Delete(i);
+      MessageDlg('File not found, entry removed.'#13+
+                 ExtractFileName(item.Hint), mtInformation, [mbOk],0);
       i:= popOpenLastSavedStream.IndexOf(item);
       if i > -1 then
         popOpenLastSavedStream.Delete(i);
-      beep
     end;
   end;
 end;
@@ -4095,11 +4194,31 @@ procedure OnProcessParamTimer;
 var
   x: Integer;
   s,w: String;
+
+  function GetStop(const x: Integer): boolean;
+  begin with Form1 do
+  begin
+    Result:= False;
+    If FStop then
+    begin
+      If x <= ParamCount then
+      begin
+        if MessageDlg('Stop also all the next?', mtConfirmation,[mbYes, mbNo],0)
+          <> mrNo then
+            Result:= True;
+      end
+      else
+        Result:= True;
+    end
+  end;
+  end;
+
 begin with Form1 do
 begin
   KillTimer(Handle, 1111);
   // TODO make it better
   x:= 1;
+  FStop:= False;
   While x <= ParamCount do
   begin
     w:= '';
@@ -4115,11 +4234,16 @@ begin
          ProzessParamStr(s, w)
       else begin
         ProzessParamStr(s, '');
+        If GetStop(x) then
+          exit;
         ProzessParamStr(w, '');
       end;
     end
-    else ProzessParamStr(s, '');
+    else
+      ProzessParamStr(s, '');
     inc(x);
+    If GetStop(x) then
+      exit;
   end;
 end;
 end;
@@ -4206,6 +4330,7 @@ begin
         with TStyleManager do SystemHooks:= SystemHooks - [shDialogs];
       FClipsToClipTweak:= ini.ReadBool('Tweaks', 'ClipsToClipTweak', False);
       FMaxBmCount:= ini.ReadInteger('Tweaks', 'MaxBmCount', 1000);
+      popClipsToClipAddClip.Visible:= ini.ReadBool('Tweaks', 'ShowClipsToClipAddClip', False);
     Finally
       ini.Free;
     End;
@@ -4428,9 +4553,67 @@ begin
       ini.WriteBool('Tweaks', 'StyleHook_shDialog', not (shDialogs in TStyleManager.SystemHooks));
       ini.WriteBool('Tweaks', 'ClipsToClipTweak', FClipsToClipTweak);
       ini.WriteInteger('Tweaks', 'MaxBmCount', FMaxBmCount);
+      ini.WriteBool('Tweaks', 'ShowClipsToClipAddClip', popClipsToClipAddClip.Visible);
     Finally
       ini.Free;
     End;
+  end;
+end;
+
+
+// return Name as FrameNr and Title as Value (Nr=Title)
+function BookmarksFromFile(const fileName: String; SL: TStringList): Integer;
+const
+  digit: TSysCharSet = ['0'..'9'];
+var
+  s: String;
+  i,x: Integer;
+begin
+  Result:= -1;
+  Try
+    SL.LoadFromFile(fileName);
+    if SameText(ExtractFileExt(fileName), '.avs') then
+    begin
+      For i:= 0 to SL.Count -1 do
+      begin
+        s:= TrimLeft(SL[i]);
+        if s.StartsWith('#Bookmarks:') then  //- ignor all other e.g. ##Bookmarks:
+        begin
+          Delete(s, 1, Length('#Bookmarks:'));
+          s:= trimLeft(s);
+          SL.Clear;
+          SL.Delimiter:= ',';
+          SL.StrictDelimiter:= true; //- sonst title getrennt in anderem Index
+          SL.DelimitedText:= s;
+          break;
+        end;
+      end;
+    end;
+
+    for i:= SL.Count-1 downto 0 do
+    begin
+      s:= Trim(SL[i]);
+      If s = '' then
+      begin
+        SL.Delete(i);
+        Continue
+      end;
+      x:= 1;
+      while CharInSet(s[x], digit) do
+        inc(x);
+
+      If x > 1 then
+      begin
+        If Length(s) > x then
+          SL[i]:= Copy(s,1, x-1) + '=' + Copy(s, x, 255)
+        else SL[i]:= Copy(s,1, x-1) + '=';
+      end
+      else SL.Delete(i);
+    end;
+    Result:= SL.Count;
+  except
+    SL.Clear;
+    exit;
   end;
 end;
 
@@ -4513,7 +4696,7 @@ begin
   End;
   If FrList = CurrentClip.FrameList then
     CurrentClip.LastOpen:= fileName;
-  Result:= CurrentClip.FrameList.Count;
+  Result:= FrList.Count;
 end;
 
 procedure TForm1.GetBookmarksThumbs(const fileName: String);
@@ -5078,7 +5261,7 @@ begin
 
   finally
     UnblockInput;
-    TabView_SetTabIndex(TabView_IndexOfClip(Source));
+    TabView_SetTabIndex(TabView_IndexOfClip(Source), True);
     TabView_SetTabText();
     SetCaption();
   end;
@@ -5118,19 +5301,31 @@ end;
 
 procedure TForm1.popAutoSplitClipClick(Sender: TObject);
 var
-  a,b: TArray<String>;
+  a,b,c: TArray<String>;
   ai: Array of Integer;
   splits, sidx: String;
-  i,idx,frameCount,srcCount, splitErr: Integer;
+  i,idx,idx2,frameCount,srcCount, splitErr: Integer;
   Clip,Clip2: TClip;
+  SL: TStringList;
 begin
-  If CurrentClip.Splits = '' then
+  //- Join first the parts if needed
+  Clip:= GetSplitFirstClip(CurrentClip);
+
+  if Assigned(Clip) then
+  begin
+    If Clip.Splits = '' then
+      exit;
+    popJoinClipPartsClick(self);
+    If Clip <> CurrentClip then
+      exit;
+  end
+  else if CurrentClip.Splits = '' then
     exit;
 
   //- split in two parts (splits, LV selected indexes for each clip)
   splits:= CurrentClip.Splits;
   i:= Pos('|', splits);
-  If i > 2 then
+  If i > 1 then
   begin
     sidx:= Copy(splits, i+1, MaxInt); //- copy first! else splits indexes empty
     b:= sidx.Split([';']);
@@ -5141,10 +5336,11 @@ begin
   splitErr:= 0;
   frameCount:= 0;
   srcCount:= CurrentClip.FrameList.Count-2;
-
+  SL:= TStringList.Create;
   For i:= 0 to High(a) do
   begin
     idx:= StrToIntDef(a[i], -1);
+    SL.Add(a[i] + '-' + IntToStr(frameCount + idx) + '-' + IntToStr(srcCount));
     If (idx > -1) and ((frameCount + idx) < srcCount) then
     begin
       inc(frameCount,idx);
@@ -5154,9 +5350,11 @@ begin
     else if idx > -1 then //- do not add error if it's not an integer e.g ','
       inc(splitErr)
   end;
-
+  SL.SaveToFile('E:\Temp\splits.txt');
+  SL.Free;
   If Length(ai) > 0 then
   begin
+    CurrentClip.FrameHistory.Clear;
     SplitClip(ai,-1);
 
     //- Set the stored selected index for each clip
@@ -5167,7 +5365,22 @@ begin
       Clip:= GetSplitFirstClip(CurrentClip);
       While Assigned(Clip) and (i < Length(b)) do
       begin
-        Clip.LastIndexLV:= StrToIntDef(b[i], -1);
+        c:= b[i].Split([',']); //- check for indexes from frame history (';2,23;')
+        if Length(c) > 0 then
+        begin
+          idx:= StrToIntDef(c[0], -1);
+          idx2:= StrToIntDef(c[1], -1);
+          if InRange(idx, 0, Clip.FrameList.Count-1) then
+            Clip.FrameHistory.Add(Clip.FrameList[idx]);
+          if InRange(idx2, 0, Clip.FrameList.Count-1) then
+            Clip.FrameHistory.Add(Clip.FrameList[idx2]);
+          if Clip.FrameHistory.Count > 0 then
+            Clip.LastHistoryIdx:= 0
+          else Clip.LastHistoryIdx:= -1;
+          Clip.LastIndexLV:= idx;
+        end
+        else
+          Clip.LastIndexLV:= StrToIntDef(b[i], -1); //- else simple LV index
         If Clip.LastIndexLV > -1 then
           Clip.LastViewOriginLV:= Point(0, MaxInt); //- Make sure selected does show at top
         Clip2:= Clip;
@@ -5179,8 +5392,11 @@ begin
         FindAvsWnd(0);
         SplitUpdateWnd(CurrentClip);
         LV_MakeItemVisible(Clip2.LastIndexLV, True, True);
-        If (LV.ItemIndex > -1) and (LV.ItemIndex < Clip2.FrameList.Count) then
-          PostMessage(Clip2.AvsWnd, AVSP_SET_FRAME_NR, 0, PFrameRec(Clip2.FrameList[LV.ItemIndex])^.FrameNr);
+
+        //- disabled, do not change the AvsPmod frame
+        {If popForceAvsPWnd.Checked and (LV.ItemIndex > -1) and (LV.ItemIndex < Clip2.FrameList.Count) then
+          PostMessage(Clip2.AvsWnd, AVSP_SET_FRAME_NR, 0, PFrameRec(Clip2.FrameList[LV.ItemIndex])^.FrameNr);}
+
       end
       else LV_MakeItemVisible(0, False, True);
     end
@@ -5433,6 +5649,52 @@ var
   fs: TBookStream;
   e,splitL: Integer;
   ClearSplits: Boolean;
+
+  {function GetFrameHistory(Clip: TClip): String;
+  var
+    i, idx,idx2: Integer;
+    s: String;
+  begin
+    Result:= '';
+    For i:= 0 to Clip.FrameHistory.Count - 1 do
+    begin
+      idx:= Clip.FrameList.IndexOf(Clip.FrameHistory[i]);
+      if idx > - 1 then
+        Result:= Result + IntToStr(idx) + ','
+      else Result:= Result + '-1,';
+      if i >= 1 then
+        exit;
+    end;
+    If (Result = '') then
+      Result:= '-1,-1;'
+    else if Clip.FrameHistory.Count < 2 then
+      Result:= Result + '-1;';
+    SetLength(Result, Length(Result)-1);
+    Result:= Result + ';';
+  end;}
+
+  //- get two history entries and try to get the selected index at top entry
+  function GetFrameHistory(Clip: TClip): String;
+  var
+    idx,idx2: Integer;
+  begin
+    If Clip.FrameHistory.Count > 0 then
+      idx:= Clip.FrameList.IndexOf(Clip.FrameHistory[0])
+    else begin
+      If Clip.LastIndexLV < Clip.FrameList.Count then
+        Result:= IntToStr(Clip.LastIndexLV) + ',-1;'
+      else Result:= '-1,-1;';
+      exit;
+    end;
+    If Clip.FrameHistory.Count > 1 then
+      idx2:= Clip.FrameList.IndexOf(Clip.FrameHistory[1])
+    else idx2:= -1;
+
+    If Clip.LastIndexLV = idx then
+      Result:= IntToStr(idx) + ',' + IntToStr(idx2) + ';'
+    else Result:= IntToStr(idx2) + ',' + IntToStr(idx) + ';'
+  end;
+
 begin
   Clip:= GetSplitFirstClip(CurrentClip);
   ClearSplits:= False;
@@ -5467,15 +5729,21 @@ begin
       //- do not add the last split part
       If Assigned(Clip2.NextPart) then
         s:= s + IntToStr(Clip2.FrameList.Count) + ',';
+
       If Clip2 = CurrentClip then
       begin
         If Assigned(LV.Selected) then
           Clip2.LastIndexLV:= LV.Selected.Index
         else Clip2.LastIndexLV:= Clip2.FrameList.Count;
       end;
-      If Clip2.LastIndexLV < Clip2.FrameList.Count then
+
+      //- Test add history
+      si:= si + GetFrameHistory(Clip2);
+
+      {If Clip2.LastIndexLV < Clip2.FrameList.Count then
         si:= si + IntToStr(Clip2.LastIndexLV) + ';'
-      else si:= si + '-1;';
+      else si:= si + '-1;';}
+
 
       Clip2:= Clip2.NextPart;
     end;
@@ -6170,6 +6438,7 @@ var
   THR: TThread;
   i,bmAll: Integer;
   Clip: TClip;
+  formatSettings: TFormatSettings;
 begin
   bmAll:= 0;
   For i:= 0 to TabView.Tabs.Count -1 do
@@ -6200,6 +6469,7 @@ begin
   ProgressBar1.Position:= 0;
   Panel1.Visible:= True;
   FStop:= False;
+  formatSettings.DecimalSeparator:= '.';
   Application.ProcessMessages;
 
   Try
@@ -6210,12 +6480,12 @@ begin
         fps: String;
       end;
     var
-      i,e,c,sc,Nr,Count,bmCount,w,h,splitsL,Header: Integer;
+      i,e,c,sc,Nr,Count,bmCount,w,h,splitsL,Header,idx,idx2,totalFrameCount: Integer;
       Clip: TClip;
       c_start: Int64;
       b: Byte;
       FFStop: boolean;
-      fileName, title, script, s, hs, ws, splits: String;
+      fileName, title, script, s, hs, ws, splits, sIdx: String;
       clipErr, fileErr: String;
       ClipsInfo: Array of TClipInfo;
 
@@ -6246,6 +6516,7 @@ begin
       bmCount:= 0;
       Count:= 0;
       splits:= '';
+      totalFrameCount:= 0;
 
       Try
         fs:= TFileStream.Create(SaveName + fext, fmCreate);
@@ -6297,10 +6568,11 @@ begin
           clipErr:= AvsGrabber.ClipError;
           if Assigned(AvsGrabber.VideoInfo) and (c > 0) then
           begin
-            ClipsInfo[Count].fps:= FloatToStrF(AvsGrabber.VideoInfo.fps_numerator/AvsGrabber.VideoInfo.fps_denominator, ffGeneral, 8, 3);
+            ClipsInfo[Count].fps:= FloatToStrF(AvsGrabber.VideoInfo.fps_numerator/AvsGrabber.VideoInfo.fps_denominator,ffFixed,8,3,formatSettings);
             ClipsInfo[Count].w:= AvsGrabber.VideoInfo.width;
             ClipsInfo[Count].h:= AvsGrabber.VideoInfo.height;
             AvsGrabber.Close;
+            inc(totalFrameCount, c);
           end
           else begin
             AvsGrabber.Close;
@@ -6312,6 +6584,22 @@ begin
           AddToScript(fileName, Count);
           inc(bmCount, Clip.FrameList.Count);
           splits:= splits + IntToStr(Clip.FrameList.Count) + ',';
+
+          //- add history
+          if Clip.FrameHistory.Count > 0 then
+            idx:= Clip.FrameList.IndexOf(Clip.FrameHistory[0])
+          else idx:= -1;
+          if Clip.FrameHistory.Count > 1 then
+            idx2:= Clip.FrameList.IndexOf(Clip.FrameHistory[1])
+          else idx2:= -1;
+          If (idx = -1) and (Clip.LastIndexLV > -1) then
+            idx:= Clip.LastIndexLV;
+          If Clip.LastIndexLV < 0 then
+            Clip.LastIndexLV:= idx;
+          If Clip.LastIndexLV = idx then
+            sidx:= sidx + IntToStr(idx) + ',' + IntToStr(idx2) + ';'
+          else sidx:= sidx + IntToStr(idx2) + ',' + IntToStr(idx) + ';';
+          //- history end
 
           With Clip.FileStream do
           begin
@@ -6354,8 +6642,10 @@ begin
         If splits.EndsWith(',') then
           SetLength(splits, Length(splits)-1);
         splits:= Copy(splits, 1, splits.LastDelimiter(','));
-        If Length(splits) > 3 then
+
+        If Length(splits) > 0 then
         begin
+          splits:= splits + '|' + sidx;  //- add history
           splitsL:= Length(splits)*2;
           fs.Position:= fs.Size;
           fs.Write(splits[1], splitsL);
@@ -6368,15 +6658,31 @@ begin
         Bookmarks.CustomSort(SortListFunc_Bookmarks);
         For i:= 0 to Bookmarks.Count -1 do
           s:= s + Bookmarks.Names[i] + Bookmarks.ValueFromIndex[i] + ',';
-        s:= s + #13#13 + script + #13#13;
+        s:= s + #13#13 + script.Trim + #13 + '###AvsPThumb_ClipsFrames:'+ IntToStr(totalFrameCount) + #13;
 
         //- Force Full HD 16/9 on 4/3 clips and Assume same FPS and kill audio
         If FClipsToClipTweak then
         begin
+          c:= 0;
+          For i:= 0 to Count -1 do //- check if size <>
+          begin
+            if i = 0 then
+            begin
+              w:= ClipsInfo[0].w;
+              h:= ClipsInfo[0].h;
+            end
+            else
+              if (ClipsInfo[i].w <> w) or (ClipsInfo[i].h <> h) then
+              begin
+                c:= 1;
+                break;
+              end;
+          end;
+
           For i:= 0 to Count -1 do
           begin
             ws:= '0'; hs:= '0';
-            If (ClipsInfo[i].w < 1920) or (ClipsInfo[i].h < 1080) then
+            If (c > 0) and (ClipsInfo[i].w < 1920) or (ClipsInfo[i].h < 1080) then
             begin
               w:= 1920 - ClipsInfo[i].w;
               If (w > 3) and (w mod 4 = 0) then
@@ -6440,6 +6746,265 @@ begin
 
 end;
 
+//procedure TForm1.ClipsToClipAddClip(TargedClip,Clip: TClip);
+procedure TForm1.ClipsToClipAddClip(const avsClipsFile: String; Clip: TClip);
+type
+  TVideoInfo = record
+    fps: String;
+    frames: Integer;
+    clipErr: String;
+  end;
+var
+  i,idx,lastNr,clipsFrames,splitsL,splitsLL,Header,c_start,Nr,e, oldCount: Integer;
+  b: Byte;
+  a: TArray<String>;
+  SL,Bookmarks: TStringList;
+  avsFile, clipsStreamName, script, title, splits: String;
+  formatSettings: TFormatSettings;
+  TH: THandle;
+  THR: TThread;
+  VideoInfo: TVideoInfo;
+  fs: TFileStream;
+
+begin
+  avsFile:= MakeAVSExt(Clip.LastOpen);
+  clipsStreamName:= ChangeFileExt(avsClipsFile, fext);
+  If not FileExists(avsFile) then
+  begin
+    MessageDlg('Avs file not found:'#13+avsFile,mtError,[mbOK],0);
+    exit;
+  end;
+
+  If not FileExists(clipsStreamName) then
+  begin
+    MessageDlg('Bookstream not found:'#13+ clipsStreamName,mtError,[mbOK],0);
+    exit;
+  end;
+
+  idx:= -1;
+  lastNr:= -1;
+  clipsFrames:= 0;
+  formatSettings.DecimalSeparator:= '.';
+  oldCount:= 0;
+  FInProgress:= True;
+  BlockInput;
+  SL:= TStringList.Create;
+  Bookmarks:= TStringList.Create;
+  Try
+    fs:= TFileStream.Create(clipsStreamName, fmOpenReadWrite or fmShareExclusive);
+  except
+    MessageDlg('Cannot open the stream.'#13+ clipsStreamName,mtError,[mbOK],0);
+    exit;
+  end;
+
+  Try
+    SL.LoadFromFile(avsFile);
+    For i:= 0 to SL.Count-1 do
+    begin
+      If SL[i].StartsWith('prefetch(') then
+        SL[i]:= '#~' +  SL[i];
+      If SL[i].StartsWith('MCTemporal') then
+        SL[i]:= StringReplace(SL[i], 'GPU=True', 'GPU=False',[rfIgnoreCase]);
+      If SL[i].StartsWith('#Bookmarks:') then
+        SL[i]:= '#~' +  SL[i];
+    end;
+    script:= SL.Text.Trim;
+    SL.Clear;
+    SL.LoadFromFile(avsClipsFile);
+    for i:= SL.Count-1 downto 0 do
+    begin
+      if (idx < 0) and SL[i].StartsWith('###AvsPThumb_ClipsFrames:') then
+      begin
+        clipsFrames:= StrToIntDef(TrimLeft(Copy(SL[i].TrimRight,26,100)), 0);
+        idx:= i;
+      end;
+      if (clipsFrames > 0) and SL[i].StartsWith('function script_') then
+      begin
+        lastNr:= StrToIntDef(StrGetDigit(SL[i]), -1);
+        break;
+      end;
+    end;
+
+    if (clipsFrames < 1) or (lastNr < 0) then
+    begin
+      MessageDlg('Cannot find the flag or last function.'#13 +
+                 '###AvsPThumb_ClipsFrames:', mtInformation,[mbOK],0);
+      exit;
+    end;
+
+    //- Get frame count from clip
+    THR:= TThread.CreateAnonymousThread(procedure
+    begin
+      VideoInfo.frames:= AvsGrabber.OpenAvs(avsFile);
+      VideoInfo.clipErr:= AvsGrabber.ClipError;
+      if Assigned(AvsGrabber.VideoInfo) and (VideoInfo.frames > 0) then
+        VideoInfo.fps:= FloatToStrF(AvsGrabber.VideoInfo.fps_numerator/AvsGrabber.VideoInfo.fps_denominator,ffFixed,8,3,formatSettings);
+      AvsGrabber.Close;
+    end);
+
+    SetCaption('Loading Avisynth: Getting frame count');
+    Screen.Cursor:= crHourGlass;
+    TH:= THR.Handle;
+    THR.Priority:= tpHigher;
+    inc(FTaskCount);
+    THR.Start;
+    Repeat
+      Case MsgWaitForMultipleObjectsEx(1, TH, INFINITE, QS_ALLINPUT, 0) of
+        WAIT_OBJECT_0+1: Application.ProcessMessages;
+        else
+          break;
+      end;
+    Until False;
+    dec(FTaskCount);
+    Screen.Cursor:= crDefault;
+
+    If VideoInfo.frames > 0 then
+      SL[idx]:= '###AvsPThumb_ClipsFrames:' + IntToStr(clipsFrames + VideoInfo.frames)
+    else
+      if MessageDlg('Get clip frame count error.'#13 +
+                    'Cannot calculate the new clips frame count.'#13+
+                    'You must manuelly edit the ###AvsPThumb_ClipsFrames:'#13#13 +
+                    'Would you show the avisynth Error?',mtInformation,[mbYes,mbNo],0)
+        = mrYes then
+          ShowMessage(VideoInfo.clipErr);
+
+    script:= #13+'function script_' + IntToStr(lastNr+1) + '(){'#13 + script + #13 + '}'#13;
+    SL.Insert(idx,script);
+    For i:= SL.Count-1 downto 0 do
+      if SL[i].TrimLeft.StartsWith('script_' + IntToStr(lastNr) + '=script_' + IntToStr(lastNr)) then
+      begin
+        SL.Insert(i+1, StringReplace(SL[i], 'script_' + IntToStr(lastNr), 'script_' + IntToStr(lastNr+1),[rfReplaceAll]));
+        break;
+      end;
+    For i:= SL.Count-1 downto 0 do
+      if SL[i].TrimLeft.StartsWith('script_1+') then
+      begin
+        SL[i]:= SL[i] + '+script_' + IntToStr(lastNr+1);
+        break;
+      end;
+
+    Try
+      With fs do
+      begin
+        Position:= 0;
+        Read(Header, SizeOf(Integer));
+        If Header = Header2Flag then
+          Read(splitsLL, SizeOf(Integer))
+        else splitsLL:= 0;
+
+        //- Get the bookmark count
+        While fs.Position < fs.Size - (50 + splitsLL) do
+        begin
+          fs.Read(Nr, SizeOf(Integer));  //- FrameNr
+          fs.Seek(SizeOf(Integer), soFromCurrent); //- BitInt
+          fs.Read(b, SizeOf(Byte));
+          if b > 0 then
+            fs.Seek(SizeOf(b), soFromCurrent); //- BitInt
+          fs.Read(e, SizeOf(Integer));     //- ImageSize
+          fs.Seek(e, soFromCurrent);
+          inc(oldCount);
+        end;
+
+        If splitsLL > 0 then
+        begin
+          Position:= Size - splitsLL;
+          Setlength(splits, splitsLL div 2);
+          Read(splits[1], splitsLL);
+        end;
+        Position:= Size - splitsLL;
+        Size:= Position;
+      end;
+
+      With Clip.FileStream do
+      begin
+        Position:= 0;
+        Read(Header, SizeOf(Integer));
+        If Header = Header2Flag then
+          Read(splitsL, SizeOf(Integer))
+        else splitsL:= 0
+      end;
+
+      Application.ProcessMessages;
+      c_start:= fs.Size;
+      fs.CopyFrom(Clip.FileStream, Clip.FileStream.Size - (Clip.FileStream.Position + splitsL));
+
+      fs.Position:= c_start;
+      While fs.Position < fs.Size - 50 do
+      begin
+        fs.Read(Nr, SizeOf(Integer));  //- FrameNr
+        fs.Position:= fs.Position - SizeOf(Integer);
+        inc(Nr, clipsFrames);
+        fs.Write(Nr, SizeOf(Integer));
+        fs.Seek(SizeOf(Integer), soFromCurrent); //- BitInt
+        fs.Read(b, SizeOf(Byte));
+        if b > 0 then                  //- Title
+        begin
+          SetLength(title, b div 2);
+          fs.Read(title[1], b);
+          Bookmarks.Add(IntToStr(Nr) + '= ' + title);
+        end
+        else Bookmarks.Add(IntToStr(Nr) + '= ');
+        fs.Read(e, SizeOf(Integer));     //- ImageSize
+        fs.Seek(e, soFromCurrent);
+      end;
+      If splitsLL > 0 then
+      begin
+        fs.Position:= fs.Size;
+
+        //- Add the new split to splits
+        idx:= splits.IndexOf('|');
+        If idx > 1 then
+        begin
+          e:= 0;
+          a:= splits.Split(['|']);
+          a:= a[0].Split([',']);
+          For i:= 0 to High(a) do  //- calculate the last clip bookmark count
+            inc(e, StrToIntDef(a[i],0));
+          splits.Insert(idx, ',' + IntToStr(oldCount - e)); //- calculate new split and insert it
+          If not splits.EndsWith(';') then
+            splits:= splits + ';';
+          splits:= splits + '-1,-1;';
+        end;
+
+        splitsLL:= Length(splits)*2;
+        fs.Write(splits[1], splitsLL);
+        fs.Position:= SizeOf(Integer);
+        fs.Write(splitsLL, SizeOf(Integer));
+      end;
+    except
+      RaiseLastOSError;
+      exit;
+    end;
+
+    Bookmarks.CustomSort(SortListFunc_Bookmarks);
+    For i:= 0 to SL.Count-1 do if SL[i].StartsWith('#Bookmarks:') then
+    begin
+      SL[i]:= SL[i].Trim;
+      If not SL[i].EndsWith(',') then
+        SL[i]:= SL[i] + ' ,';
+      For e:= 0 to Bookmarks.Count -1 do
+        SL[i]:= SL[i] + Bookmarks.Names[e] + Bookmarks.ValueFromIndex[e] + ',';
+      Try
+        SL.SaveToFile(avsClipsFile);
+      except
+        MessageDlg('Error saving the file. No write access.',mtError,[mbOK],0);
+        exit;
+      end;
+      MessageDlg('Done. Check the script.',mtInformation,[mbOK],0);
+      exit;
+    end;
+    MessageDlg('Error: No bookmarks found.'#13+'Nothing done',mtError,[mbOK],0);
+
+  finally
+    fs.Free;
+    SL.Free;
+    Bookmarks.Free;
+    FInProgress:= False;
+    UnblockInput;
+    SetCaption();
+  end;
+end;
+
 procedure TForm1.PopupMenuPopup(Sender: TObject);
 var
   b: Boolean;
@@ -6473,6 +7038,7 @@ begin
   popSaveGroup.Enabled:= (GetClip(0).FrameList.Count > 0) and not b;
   popMoveFrameNr.Enabled:= (CurrentClip.FrameList.Count > 0) and not b;
   popAddTabToGroup.Enabled:= (CurrentClip.FrameList.Count > 0) and not b;
+  popClipsToClipAddClip.Enabled:= (CurrentClip.FrameList.Count > 0) and not b
 end;
 
 procedure TForm1.popHideClipMenuClick(Sender: TObject);
