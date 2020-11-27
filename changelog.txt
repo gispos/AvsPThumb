@@ -1,3 +1,8 @@
+2.0.9 [27.11.2020]
+- Split clip saves the AvsPmod xy video window position for each tab
+- Compatible with AvsPmod zoom function antiliasing 
+- Some other changes
+
 2.0.8 [02.05.2020]
 - Changed:
     - Index history (prev Index, mouse browse buttons) is now stored for each Clip. Also retained on tab change.

@@ -3,7 +3,7 @@
 
   AvsPThumb, bookmark reader for AvsPmod
 
-  GPo 2020.04.01  Version 2.0.8
+  GPo 2020.04.01  Version 2.0.9
 
 ################################################################################
 *)
@@ -13,7 +13,7 @@ unit Main;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Winapi.Windows,Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ComCtrls, CommCtrl, Vcl.StdCtrls, AvisynthGrabber, JPEG,
   IniFiles, Vcl.Menus, Vcl.Themes, Vcl.ExtCtrls, SingleInstance, Vcl.Tabs, System.UITypes,
   System.Types, ListViewEx, System.Threading, SyncObjs;
@@ -72,6 +72,7 @@ type
     AvsP_video_h: Integer;
     AvsP_vid_wnd_w : Integer;
     AvsP_vid_wnd_h : Integer;
+    AvsP_scroll : TPoint;
     TabSet_LastIndex: Integer;
     Splits: String;
     constructor Create;
@@ -277,6 +278,9 @@ type
     procedure popCleanUpHistoryClick(Sender: TObject);
     procedure popReleaseVideoMemoryClick(Sender: TObject);
     procedure popClipsToClipAddClipClick(Sender: TObject);
+    procedure LVMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure LVMouseLeave(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
     procedure AppOnMessages(var Msg: TMsg; var Handled: Boolean);
@@ -303,6 +307,7 @@ type
     FClipsToClipTweak: boolean;
     //- max bookmark count 1000, up to AvsPmod 2.6.1.1r2 1500, change it in the ini under Tweaks
     FMaxBmCount: Integer;
+    FMouse_moved: Boolean;
     procedure ListView_SetWidth;
     procedure Clear;
     function AddFavorList(Source, Targed : TList; Index: Integer): Integer;
@@ -400,10 +405,13 @@ const
   AVSP_SET_FRAME_NR = 32771;
   AVSP_SCROLL_STEP = 32772;
   AVSP_SCROLL = 32773;
+  AVSP_RESET_ANTIALIAS = 32774;
   AVSP_VIDEO_SIZE = 32800;
   AVSP_VIDEO_WND_SIZE = 32801;
   AVSP_VIRTUAL_SIZE = 32802;
   AVSP_GET_FRAME_NR = 32803;
+  AVSP_GET_SCROLL_POS = 32804;
+
   AVSP_CLIP_RETURN = 33000;
 
 
@@ -506,6 +514,7 @@ begin
   AvsP_video_h:= -1;
   AvsP_vid_wnd_w:= -1;
   AvsP_vid_wnd_h:= -1;
+  AvsP_scroll:= Point(-1,-1)
 end;
 
 destructor TClip.Destroy;
@@ -1247,6 +1256,12 @@ begin
         end;
       end;
 
+    AVSP_GET_SCROLL_POS:  //- store AvsP scroll pos in the current clip
+      begin
+        CurrentClip.AvsP_scroll:= Point(Message.WParam, Message.LParam);
+        Handled:= True;
+      end;
+
     AVSP_CLIP_RETURN:  //- If the tab of the filename found, (FindAvsWND with timeout > 0)
       begin            //- AvsP return his Wnd and the Addr of the Clip that has send the request
         Handled:= True;
@@ -1427,6 +1442,7 @@ begin
         end;
         112: popZ100Fit.Click;
         113: popResetDefaultPos.Click;
+
       End;
     end
     else if Msg.message = WM_KEYDOWN then
@@ -1462,7 +1478,15 @@ begin
     else if (Msg.message = WM_XBUTTONDOWN) and (Msg.hwnd = LV.Handle) then
     begin
       Handled:= True;
-      if (LV.Items.Count > 0) and (CurrentClip.FrameHistory.Count > 0) then
+      if (Byte(GetKeyState(vkMenu)) > 100) and Assigned(LV.Selected) then  // jump
+      begin
+        if LoWord(Msg.wParam) = 32 then // XBUTTON2
+          LV_MakeItemVisible(LV.Selected.Index-1, True, IsSplitClip(CurrentClip))
+        else LV_MakeItemVisible(LV.Selected.Index+1, True, IsSplitClip(CurrentClip));
+        double_click:= False;
+        LVMouseDown(self, mbLeft, [ssLeft], Mouse.CursorPos.X, Mouse.CursorPos.y);
+      end
+      else if (LV.Items.Count > 0) and (CurrentClip.FrameHistory.Count > 0) then
       begin
         i:= FrameHistoryFind(CurrentClip, true);
         If i < 0 then
@@ -2434,7 +2458,8 @@ var
   wt: Integer;
   THR: TThread;
   TH: THandle;
-
+  //itemRect: TRect;
+  //idx : Integer;
 begin
   //- stored for mouse move
   rect_down:= Rect(X,Y,X+1,Y+1);
@@ -2453,9 +2478,38 @@ begin
   if (Button = mbRight) and not LeftDown then
      PopupMenu.Popup(Mouse.CursorPos.X,Mouse.CursorPos.Y)
   else begin
-
     if not Assigned(LV.Selected) then
       exit;
+
+    // test select next or prev
+    {
+    itemRect:= LV.Items.Item[LV.Selected.Index].DisplayRect(drIcon);
+    if FLVMouseDown.X > itemRect.Right - 15 then
+    begin
+      LockWindowUpdate(LV.Handle);
+      if FLVMouseDown.Y > itemRect.Top + ((itemRect.Bottom-itemRect.Top) div 2) then
+      begin
+        idx:= min(LV.Selected.Index+1, LV.Items.Count-1);
+        LV.Scroll(0, LV.Items[idx].GetPosition.Y - LV.Items[LV.Selected.Index].GetPosition.Y);
+      end
+      else begin
+        idx:= max(LV.Selected.Index-1, 0);
+        LV.Scroll(0, LV.Items[idx].GetPosition.Y - LV.Items[LV.Selected.Index].GetPosition.Y);
+      end;
+      LV.Items[idx].Selected:= True;
+      LockWindowUpdate(0);
+      LV_StyleBugFix;
+      LV.Invalidate;
+    end;
+    }
+    {
+    if FLVMouseDown.X > itemRect.Right - 15 then
+    begin
+      if FLVMouseDown.Y > itemRect.Top + ((itemRect.Bottom-itemRect.Top) div 2) then
+        LV_MakeItemVisible(LV.Selected.Index+1,True,True)
+      else LV_MakeItemVisible(LV.Selected.Index-1,True,True)
+    end;
+    }
 
     if LeftDown and (Byte(getKeyState(VK_MBUTTON)) > 100) then
       FrameHistoryAdd(CurrentClip, LV.ItemIndex);
@@ -2595,6 +2649,20 @@ begin
   end;
 end;
 
+procedure TForm1.LVMouseLeave(Sender: TObject);
+begin
+  if FMouse_moved then
+  begin
+    FMouse_moved:= False;
+    if CurrentClip.AvsWnd = 0 then
+      exit;
+    // store AvsP scroll position for later use on tab change
+    if IsSplitClip(CurrentClip) then
+      PostMessage(CurrentClip.AvsWnd, AVSP_INFORM, Handle, AVSP_GET_SCROLL_POS);
+    PostMessage(CurrentClip.AvsWnd, AVSP_RESET_ANTIALIAS, 1, 0); // wparam: 0 = disable, 1 = reset default
+  end;
+end;
+
 procedure TForm1.LVMouseMove(Sender: TObject; Shift: TShiftState; X,
   Y: Integer);
 var
@@ -2644,8 +2712,11 @@ begin
     end;
 
     PostMessage(CurrentClip.AvsWnd, AVSP_SCROLL_STEP, 50000+xm, ym);
+    //PostMessage(CurrentClip.AvsWnd, AVSP_INFORM, Handle, AVSP_GET_SCROLL_POS); //  On MouseUp
+    //Application.ProcessMessages;
     rect_down.Left:=  X;
     rect_down.Top:= Y;
+    FMouse_moved:= True
   end                                                    //- SplitMove
   else if ((ssLeft in Shift) and (ssRight in Shift)) and
     ((ABS(X - rect_down.Left) > 8) or (ABS(Y - rect_down.Top) > 8)) then
@@ -2693,6 +2764,19 @@ begin
     ((ABS(X - rect_down.Left) > 8) or (ABS(Y - rect_down.Top) > 8)) then
        LV.BeginDrag(False);
   }
+end;
+
+procedure TForm1.LVMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  if FMouse_moved then
+  begin
+    FMouse_moved:= False;
+    // store AvsP scroll position for later use on tab change
+    if IsSplitClip(CurrentClip) then
+      PostMessage(CurrentClip.AvsWnd, AVSP_INFORM, Handle, AVSP_GET_SCROLL_POS);
+    PostMessage(CurrentClip.AvsWnd, AVSP_RESET_ANTIALIAS, 1, 0); // wparam: 0 = disable, 1 = reset default
+  end;
 end;
 
 procedure TForm1.LVResize(Sender: TObject);
@@ -2777,8 +2861,8 @@ end;
 procedure TForm1.TabSetChange(Sender: TObject; NewTab: Integer;
   var AllowChange: Boolean);
 begin
-  AllowChange:= (NewTab = 0) or ((CurrentClip.FavorList.Count > 0) and (NewTab = 1)) or
-    ((CurrentClip.Favor2List.Count > 0) and (NewTab = 2)) and (not FInProgress);
+  AllowChange:= not FInProgress and ((NewTab = 0) or ((CurrentClip.FavorList.Count > 0) and (NewTab = 1)) or
+    ((CurrentClip.Favor2List.Count > 0) and (NewTab = 2)));
   If not AllowChange then
     exit;
 
@@ -2821,6 +2905,18 @@ begin
     CurrentClip.TabSet_LastIndex:= NewTab;
     //LV.Enabled:= True;   //- Bug fix Delphi Styles
   End;
+
+  //- Reset Zoom Fit
+  If ActiveList.Count > 0 then
+  begin
+    If popZFit.Checked and (Form1.WindowState <> wsMaximized) then
+    begin
+      FZoom:= 100;
+      popZFit.Tag:= 0;
+      SendMessage(Handle, WM_SIZE, SIZE_RESTORED, 0);
+    end
+    else SetZoom;
+  end;
 
   //- Or remove it, then last scroll pos is used
   If Assigned(LV.Selected) then
@@ -2938,7 +3034,26 @@ begin
 
   LV.ClearSelection;
   TabSet.OnChange:= nil;
+
+  //- Only for SplitClip
+  if (CurrentClip.AvsP_scroll.X > -1) and (Clip.AvsP_scroll.X < 0) then
+    Clip.AvsP_scroll:= CurrentClip.AvsP_scroll;
+
   CurrentClip:= Clip;
+
+  //- Reset Zoom Fit
+  {
+  If CurrentClip.FrameList.Count > 0 then
+  begin
+    If popZFit.Checked and (Form1.WindowState <> wsMaximized) then
+    begin
+      FZoom:= 100;
+      popZFit.Tag:= 0;
+      SendMessage(Handle, WM_SIZE, SIZE_RESTORED, 0);
+    end
+    else SetZoom;
+  end;
+  }
 
   Try
     i:= TabSet.Tabs.IndexOf('Basket');
@@ -2946,18 +3061,6 @@ begin
       TabSet.Tabs.Delete(i)
     else if (Clip.Favor2List.Count > 0) and (i < 0) then
        TabSet.Tabs.Add('Basket');
-
-    //- Reset Zoom Fit
-    If CurrentClip.FrameList.Count > 0 then
-    begin
-      If popZFit.Checked then
-      begin
-        FZoom:= 100;
-        popZFit.Tag:= 0;
-        SendMessage(Handle, WM_SIZE, SIZE_RESTORED, 0);
-      end
-      else SetZoom;
-    end;
 
     //- Restore the old LV Origin
     Case Clip.TabSet_LastIndex of
@@ -2994,6 +3097,18 @@ begin
     TabSet.TabIndex:= Clip.TabSet_LastIndex;
     TabSet.OnChange:= TabSetChange;
   End;
+
+  //- Reset Zoom Fit
+  If CurrentClip.FrameList.Count > 0 then
+  begin
+    If popZFit.Checked and (Form1.WindowState <> wsMaximized) then
+    begin
+      FZoom:= 100;
+      popZFit.Tag:= 0;
+      SendMessage(Handle, WM_SIZE, SIZE_RESTORED, 0);
+    end
+    else SetZoom;
+  end;
 
   AllowChange:= True;
   SetCaption;
@@ -3085,7 +3200,10 @@ begin
           item:= LV.GetNearestItem(Point(0,40),sdRight);
           If Assigned(item) then i:= item.Index;
         end;
-        PostMessage(CurrentClip.AvsWnd, AVSP_SET_FRAME_NR, 0, PFrameRec(ActiveList[i])^.FrameNr);
+        if CurrentClip.AvsP_scroll.X > -1 then
+          PostMessage(CurrentClip.AvsWnd, AVSP_SET_FRAME_NR, MAKEWPARAM(CurrentClip.AvsP_scroll.X, CurrentClip.AvsP_scroll.Y), PFrameRec(ActiveList[i])^.FrameNr)
+        else
+          PostMessage(CurrentClip.AvsWnd, AVSP_SET_FRAME_NR, 0, PFrameRec(ActiveList[i])^.FrameNr)
       end;
     end;
   end;
@@ -4150,12 +4268,14 @@ var
     WindowState:= w;
     Update;
     Repaint;
-    If popZFit.Checked then
+    If popZFit.Checked and (Form1.WindowState <> wsMaximized) then
     begin
       popZFit.Tag:= 0;
       FZoom:= 100;
       SendMessage(Handle, WM_SIZE, SIZE_RESTORED, 0);
-    end;
+    end
+    else SetZoom;
+
     SetForegroundWindow(Handle);
     If LV.Enabled then
       LV.SetFocus;
@@ -5095,7 +5215,7 @@ begin
       CurrentClip.ThumbWidth:= PFrameRec(CurrentClip.FrameList[0])^.bmp.Width;
       CurrentClip.ThumbHeight:= PFrameRec(CurrentClip.FrameList[0])^.bmp.Height;
       CurrentClip.AR:= CurrentClip.ThumbWidth/CurrentClip.ThumbHeight;
-      If popZFit.Checked then
+      If popZFit.Checked and (Form1.WindowState <> wsMaximized) then
       begin
         FZoom:= 100;
         popZFit.Tag:= 0;
@@ -5301,12 +5421,12 @@ end;
 
 procedure TForm1.popAutoSplitClipClick(Sender: TObject);
 var
-  a,b,c: TArray<String>;
+  a,b,c,d: TArray<String>;
   ai: Array of Integer;
   splits, sidx: String;
   i,idx,idx2,frameCount,srcCount, splitErr: Integer;
   Clip,Clip2: TClip;
-  SL: TStringList;
+  //SL: TStringList;
 begin
   //- Join first the parts if needed
   Clip:= GetSplitFirstClip(CurrentClip);
@@ -5331,16 +5451,30 @@ begin
     b:= sidx.Split([';']);
     splits:= Copy(splits, 1, i-1);
   end;
+
   a:= splits.Split([',']);
+
+  if (Length(a) > 0) and (Pos('>', a[0]) > 0) then  // AvsP scroll pos
+  begin
+    SetLength(d, Length(a));
+    For i:= 0 to High(a) do
+    begin
+      idx:= Pos('>', a[i]);
+      d[i]:= Copy(a[i], idx +1, 20);
+      a[i]:= Copy(a[i], 1, idx -1);
+    end;
+    if StrToIntDef(a[High(a)], -1) < 0 then  // remove the last clip, its only the scroll position for it
+      SetLength(a, Length(a)-1)
+  end;
 
   splitErr:= 0;
   frameCount:= 0;
   srcCount:= CurrentClip.FrameList.Count-2;
-  SL:= TStringList.Create;
+
   For i:= 0 to High(a) do
   begin
     idx:= StrToIntDef(a[i], -1);
-    SL.Add(a[i] + '-' + IntToStr(frameCount + idx) + '-' + IntToStr(srcCount));
+    //SL.Add(a[i] + '-' + IntToStr(frameCount + idx) + '-' + IntToStr(srcCount));
     If (idx > -1) and ((frameCount + idx) < srcCount) then
     begin
       inc(frameCount,idx);
@@ -5350,12 +5484,24 @@ begin
     else if idx > -1 then //- do not add error if it's not an integer e.g ','
       inc(splitErr)
   end;
-  SL.SaveToFile('E:\Temp\splits.txt');
-  SL.Free;
+
   If Length(ai) > 0 then
   begin
     CurrentClip.FrameHistory.Clear;
     SplitClip(ai,-1);
+
+    if Length(d) > 0 then  // restore AvsP scroll XY
+    begin
+      Clip:= GetSplitFirstClip(CurrentClip);
+      i:= 0;
+      While Assigned(Clip) and (High(d) >= i) do
+      begin
+        Clip.AvsP_scroll.X:= StrToIntDef(Copy(d[i], 1, Pos('_', d[i]) -1), -1);
+        Clip.AvsP_scroll.Y:= StrToIntDef(Copy(d[i], Pos('_', d[i])+1, 10), -1);
+        Clip:= Clip.NextPart;
+        inc(i);
+      end;
+    end;
 
     //- Set the stored selected index for each clip
     If Length(b) > 0 then
@@ -5493,7 +5639,7 @@ begin
     begin
       //- SplitSort also calls TabViewChange
       TabView_SplitSort(CurrentClip);
-      If popZFit.Checked then
+      If popZFit.Checked and (Form1.WindowState <> wsMinimized) then
       begin
         FZoom:= 100;
         popZFit.Tag:= 0;
@@ -5650,29 +5796,6 @@ var
   e,splitL: Integer;
   ClearSplits: Boolean;
 
-  {function GetFrameHistory(Clip: TClip): String;
-  var
-    i, idx,idx2: Integer;
-    s: String;
-  begin
-    Result:= '';
-    For i:= 0 to Clip.FrameHistory.Count - 1 do
-    begin
-      idx:= Clip.FrameList.IndexOf(Clip.FrameHistory[i]);
-      if idx > - 1 then
-        Result:= Result + IntToStr(idx) + ','
-      else Result:= Result + '-1,';
-      if i >= 1 then
-        exit;
-    end;
-    If (Result = '') then
-      Result:= '-1,-1;'
-    else if Clip.FrameHistory.Count < 2 then
-      Result:= Result + '-1;';
-    SetLength(Result, Length(Result)-1);
-    Result:= Result + ';';
-  end;}
-
   //- get two history entries and try to get the selected index at top entry
   function GetFrameHistory(Clip: TClip): String;
   var
@@ -5728,7 +5851,11 @@ begin
     begin
       //- do not add the last split part
       If Assigned(Clip2.NextPart) then
-        s:= s + IntToStr(Clip2.FrameList.Count) + ',';
+        //s:= s + IntToStr(Clip2.FrameList.Count) + ',';
+        s:= s + IntToStr(Clip2.FrameList.Count) + '>' + Clip2.AvsP_scroll.X.ToString
+                                                + '_' + Clip2.AvsP_scroll.Y.ToString + ','
+      else
+        s:= s + '-1>' + Clip2.AvsP_scroll.X.ToString + '_' + Clip2.AvsP_scroll.Y.ToString; // save last clip scroll
 
       If Clip2 = CurrentClip then
       begin
@@ -5744,8 +5871,8 @@ begin
         si:= si + IntToStr(Clip2.LastIndexLV) + ';'
       else si:= si + '-1;';}
 
-
       Clip2:= Clip2.NextPart;
+
     end;
 
     Clip.Splits:= s + '|' + si;

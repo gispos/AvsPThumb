@@ -53,7 +53,9 @@ object Form1: TForm1
     OnDragDrop = LVDragDrop
     OnDragOver = LVDragOver
     OnMouseDown = LVMouseDown
+    OnMouseLeave = LVMouseLeave
     OnMouseMove = LVMouseMove
+    OnMouseUp = LVMouseUp
     OnResize = LVResize
     OnSelectItem = LVSelectItem
     OnStartDrag = LVStartDrag
