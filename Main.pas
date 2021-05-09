@@ -193,6 +193,7 @@ type
     popReleaseVideoMemory: TMenuItem;
     popClipsToClipAddClip: TMenuItem;
     N21: TMenuItem;
+    popMoveAllSplits: TMenuItem;
     procedure LVSelectItem(Sender: TObject; Item: TListItem;
       Selected: Boolean);
     procedure FormCreate(Sender: TObject);
@@ -281,6 +282,7 @@ type
     procedure LVMouseUp(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure LVMouseLeave(Sender: TObject);
+    procedure popMoveAllSplitsClick(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
     procedure AppOnMessages(var Msg: TMsg; var Handled: Boolean);
@@ -375,10 +377,12 @@ type
     procedure SplitUpdateWnd(Source: TClip); inline;
     function SplitFindFrameNr(Source: TClip; const Nr: Integer): TClipIdx; inline;
     procedure SplitsSetCaption(Source: TClip);
+    procedure MoveNextSplits();
     //-
     //~function Clips_IndexOfAvsWnd(const hWnd : THandle): Integer;
     function FrameHistoryFind(Clip: TClip; next: boolean): Integer;
     procedure FrameHistoryAdd(Clip: TClip; LV_Index: Integer);
+
   end;
 
   {
@@ -845,6 +849,7 @@ begin
   SetLength(Result, MenuItemInfo.cch);
 end;
 
+{
 function SendCommand(const WND: HWND; const command: String): Boolean;
 var
   hSubMenu: HMENU;
@@ -915,6 +920,35 @@ begin
   end
   else
     beep; //RaiseLastOSError;
+end;
+}
+
+function SendGotoBookmark(const WND: HWND; const command: String): Boolean;
+var
+  nr: String;
+  Data: TCopyDataStruct;
+
+  function GetDigit(const s: String):String;
+  const
+    digit = ['0'..'9'];
+  var i: Integer;
+  begin
+    Result:= '';
+    If s <> '' then
+      for i:= 1 to Length(s) do
+        if CharInSet(s[i], digit) then
+          Result:= Result + s[i]
+        else if (Result <> '') then  //- break at first "no digit"
+          break
+  end;
+
+begin
+  Result:= False;
+  If WND <= 0 then
+    exit;
+  nr:= GetDigit(command);
+  if Form1.SendCopyData(WND, nr, 6, 2000) > 0 then
+    Result:= True
 end;
 
 
@@ -1455,7 +1489,6 @@ begin
           begin
             Handled:= True;
             double_click:= False;
-            //~SendCommand(AvsWnd, IntToStr(PFrameRec(ActiveList[LV.Selected.Index])^.FrameNr));
             LVMouseDown(self, mbLeft, [ssLeft], Mouse.CursorPos.X, Mouse.CursorPos.y);
           end;
         {
@@ -1896,6 +1929,7 @@ begin
   popSaveCurrentSplits.Enabled:= Assigned(Clip);
   popSplitMergeNext.Enabled:= Assigned(CurrentClip.NextPart);
   popSplitMergePrev.Enabled:= Assigned(CurrentClip.PrevPart);
+  popMoveAllSplits.Enabled:= popAutoSplitClip.Enabled;
 end;
 
 procedure TForm1.popClipsToClipClick(Sender: TObject);
@@ -2618,7 +2652,7 @@ begin
         //- Find the bookmark in the AvsP Menu
         //- Alternative, but without returned result
         //~PostMessage(CurrentClip.AvsWnd, AVSP_SET_FRAME_NR, 0, PFrameRec(ActiveList[LV.Selected.Index])^.FrameNr);
-        If not SendCommand(CurrentClip.AvsWnd, IntToStr(PFrameRec(ActiveList[LV.Selected.Index])^.FrameNr))
+        If not SendGotoBookmark(CurrentClip.AvsWnd, IntToStr(PFrameRec(ActiveList[LV.Selected.Index])^.FrameNr))
           then with CurrentClip do
           begin
              //- Reset if AvsP Wnd closed or wrong Wnd or tab not exists
@@ -5906,6 +5940,56 @@ begin
   ShowMessage('Done');
 end;
 
+procedure TForm1.MoveNextSplits();
+var
+ Clip : TClip;
+ splits,s: String;
+ i,x,nr, start, cur: Integer;
+ a : TArray<String>;
+begin
+  Clip:= GetSplitFirstClip(CurrentClip);
+  If not Assigned(Clip) or (Clip.Splits = '') then
+    exit;
+  start:= TabView.TabIndex;
+  cur:= -1;
+  s:= '0';
+  If not InputQuery('Move split clips from current tab', 'Bookmark count', s) then
+    exit;
+  nr := StrToIntDef(s, 0);
+  if nr = 0 then
+    exit;
+  a:= Clip.Splits.Split(['>']);   // contains also not valide integer entries
+  For i:= 0 to High(a) do
+  begin
+    x := StrToIntDef(a[i], -1);   // check if entry valid integer
+    if x > -1 then
+    begin
+      inc(cur);                  // inc valide index
+      if cur >= start then       // if index >= change the value
+      begin
+        x := x + nr;
+        a[i]:= IntToStr(x)
+      end;
+    end;
+  end;
+
+  if cur < start then
+  begin
+    MessageDlg('Not enough split clips after the current tab index',mtError,[mbOK],0);
+    exit;
+  end;
+
+  splits:= '';
+  // now recreate the splits
+  For i:= 0 to High(a) do
+    splits := splits + a[i] + '>';
+  // remove the last >
+  Setlength(splits, length(splits) - 1);
+  Clip.Splits:= splits;
+  popAutoSplitClipClick(self);
+  MessageDlg('Done.'#13+'Check the clips and save it ''Store current splits''',mtInformation,[mbOK],0)
+end;
+
 procedure TForm1.popSaveFavoritesClick(Sender: TObject);
 begin
   SaveFavoritesToStream();
@@ -6507,6 +6591,11 @@ begin
 
   If Result <> CurrentClip.FrameList.Count then
     MessageDlg(IntToStr(CurrentClip.FrameList.Count-Result)+ 'frames not saved.',mtInformation,[mbOk],0);
+end;
+
+procedure TForm1.popMoveAllSplitsClick(Sender: TObject);
+begin
+  MoveNextSplits();
 end;
 
 procedure TForm1.MoveFrameNr(idxStart, idxEnd, Amount: Integer; direct: boolean);
