@@ -194,6 +194,8 @@ type
     popClipsToClipAddClip: TMenuItem;
     N21: TMenuItem;
     popMoveAllSplits: TMenuItem;
+    popActiveTabColor: TMenuItem;
+    popShowIndex: TMenuItem;
     procedure LVSelectItem(Sender: TObject; Item: TListItem;
       Selected: Boolean);
     procedure FormCreate(Sender: TObject);
@@ -283,6 +285,7 @@ type
       Shift: TShiftState; X, Y: Integer);
     procedure LVMouseLeave(Sender: TObject);
     procedure popMoveAllSplitsClick(Sender: TObject);
+    procedure popActiveTabColorClick(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
     procedure AppOnMessages(var Msg: TMsg; var Handled: Boolean);
@@ -308,6 +311,7 @@ type
     //- if true script can mix 1920 16/9 clips with 1440 4/3 clips, force Assume FPS and kill audio
     FClipsToClipTweak: boolean;
     //- max bookmark count 1000, up to AvsPmod 2.6.1.1r2 1500, change it in the ini under Tweaks
+    // now set to 5000
     FMaxBmCount: Integer;
     FMouse_moved: Boolean;
     procedure ListView_SetWidth;
@@ -377,7 +381,8 @@ type
     procedure SplitUpdateWnd(Source: TClip); inline;
     function SplitFindFrameNr(Source: TClip; const Nr: Integer): TClipIdx; inline;
     procedure SplitsSetCaption(Source: TClip);
-    procedure MoveNextSplits();
+    //procedure MoveNextSplits();
+    procedure MoveNextSplit();
     //-
     //~function Clips_IndexOfAvsWnd(const hWnd : THandle): Integer;
     function FrameHistoryFind(Clip: TClip; next: boolean): Integer;
@@ -926,7 +931,7 @@ end;
 function SendGotoBookmark(const WND: HWND; const command: String): Boolean;
 var
   nr: String;
-  Data: TCopyDataStruct;
+  //Data: TCopyDataStruct;
 
   function GetDigit(const s: String):String;
   const
@@ -2010,6 +2015,18 @@ begin
   LV.Repaint;
 end;
 
+// Is overriden by theme
+procedure TForm1.popActiveTabColorClick(Sender: TObject);
+begin
+  ColorDialog.Color:= TabView.SelectedColor;
+  If not ColorDialog.Execute(Handle) then
+    exit;
+  TabView.SelectedColor:= ColorDialog.Color;
+  TabSet.SelectedColor:= ColorDialog.Color;
+  TabView.Repaint;
+  TabSet.Repaint;
+end;
+
 procedure TForm1.popBackupFavorClick(Sender: TObject);
 var
   i: Integer;
@@ -2225,9 +2242,11 @@ begin
   ListView_GetItemRect(LV.Handle,item.Index,R,LVIR_ICON);
   ListView_GetItemRect(LV.Handle,item.Index,RB,LVIR_LABEL);
   P:= PFrameRec(ActiveList[item.Index]);
+  x:= R.Left+2;
+  y:= R.Top+2;
 
   If FZoom = 100 then with P^.bmp do
-    BitBlt(LV.Canvas.Handle,R.Left+2,R.Top+2,Width,Height,
+    BitBlt(LV.Canvas.Handle,x,y,Width,Height,
            Canvas.Handle,0,0,SRCCOPY)
   else begin
     SetStretchBltMode(LV.Canvas.Handle,HALFTONE);
@@ -2247,8 +2266,12 @@ begin
       If y > 3 then
         y:= y div 2;
 
-      StretchBlt(LV.Canvas.Handle,R.Left+x,R.Top+y,w,h,
+      x:= R.Left+x;
+      y:= R.Top+y;
+
+      StretchBlt(LV.Canvas.Handle,x,y,w,h,
                  Canvas.Handle,0,0,Width,Height,SRCCOPY);
+
     end;
   end;
 
@@ -2272,7 +2295,18 @@ begin
 
   LV.Canvas.Brush.Color:= LV.Color;
   SetBkMode(LV.Canvas.Handle,TRANSPARENT);
-  DrawTextEx(LV.Canvas.Handle,PChar(s),-1,RB,DT_CENTER,nil)
+  DrawTextEx(LV.Canvas.Handle,PChar(s),-1,RB,DT_CENTER or DT_INTERNAL or DT_NOCLIP,nil);
+
+  if popShowIndex.Checked then
+  begin
+    SetTextColor(LV.Canvas.Handle, clWhite);
+    SetBkMode(LV.Canvas.Handle,OPAQUE);
+    //RB.Left := 4;
+    R.Left:= x + 4;
+    R.Top:= y + 4;
+    DrawTextEx(LV.Canvas.Handle,PChar(IntToStr(item.Index)),-1,R,DT_LEFT or DT_INTERNAL or DT_NOCLIP,nil);
+  end;
+
 end;
 
 procedure TForm1.LVData(Sender: TObject; Item: TListItem);
@@ -4438,7 +4472,7 @@ begin
   FHide_SB_HORZ:= true;
   popSendCommand.Caption:= 'Send Command';
   FDefStyle:= 'Windows';
-  FMaxBmCount:= 1000;
+  FMaxBmCount:= 5000;
   AVSGrabber:= TAvisynthGrabber.Create;
 
   Fbmp:= TBitmap.Create;
@@ -4463,6 +4497,7 @@ begin
       popSingleInstance.Checked:= ini.ReadBool('Main', 'SingleInstance', true);
       fRunProg:= ini.ReadString('Main', 'RunProg', '');
       popShowTitle.Checked:= ini.ReadBool('Main', 'ShowTitle', False);
+      popShowIndex.Checked:= ini.ReadBool('Main', 'ShowIndex', False);
       popTitleAutoAddFavor.Checked:= ini.ReadBool('Main', 'TitleAutoAddFavor', true);
       ZoomIdx:= iniReadRadioItem(ini, 'Main', 'Zoom', 2, popZoom);
       FJPEGQuality:= ini.ReadInteger('Main', 'JPEG_Q', 85);
@@ -4474,6 +4509,8 @@ begin
       popForceAvsPWnd.Checked:= ini.ReadBool('Main', 'TabForceAvsWnd', False);
       popShowPreview.Checked:= ini.ReadBool('Main', 'TabShowPreview', True);
       LV.Color:= ini.ReadInteger('Main', 'BackgroundColor', clBlack);
+      TabView.SelectedColor:= ini.ReadInteger('Main', 'ActiveTabColor', clActiveCaption);
+      TabSet.SelectedColor:= TabView.SelectedColor;
       popClipExtraMenu.Visible:= not ini.ReadBool('Main', 'HideClipMenu', False);
 
       //- Tweaks
@@ -4483,7 +4520,7 @@ begin
       If ini.ReadBool('Tweaks', 'StyleHook_shDialog', false) then
         with TStyleManager do SystemHooks:= SystemHooks - [shDialogs];
       FClipsToClipTweak:= ini.ReadBool('Tweaks', 'ClipsToClipTweak', False);
-      FMaxBmCount:= ini.ReadInteger('Tweaks', 'MaxBmCount', 1000);
+      FMaxBmCount:= ini.ReadInteger('Tweaks', 'MaxBmCount', 5000);
       popClipsToClipAddClip.Visible:= ini.ReadBool('Tweaks', 'ShowClipsToClipAddClip', False);
     Finally
       ini.Free;
@@ -4689,6 +4726,7 @@ begin
       ini.WriteBool('Main', 'FormAutoMove', popFormAutoMove.Checked);
       ini.WriteBool('Main', 'SingleInstance', popSingleInstance.Checked);
       ini.WriteBool('Main', 'ShowTitle', popShowTitle.Checked);
+      ini.WriteBool('Main', 'ShowIndex', popShowIndex.Checked);
       ini.WriteBool('Main', 'TitleAutoAddFavor', popTitleAutoAddFavor.Checked);
       ini.WriteString('Main', 'RunProg', fRunProg);
       GPoUtils.iniWriteRadioItem(ini, 'Main', 'Zoom', popZoom);
@@ -4701,6 +4739,7 @@ begin
       ini.WriteBool('Main', 'TabForceAvsWnd', popForceAvsPWnd.Checked);
       ini.WriteBool('Main', 'TabShowPreview', popShowPreview.Checked);
       ini.WriteInteger('Main', 'BackgroundColor', LV.Color);
+      ini.WriteInteger('Main', 'ActiveTabColor', TabView.SelectedColor);
       ini.WriteBool('Main', 'HideClipMenu', popHideClipMenu.Checked);
       //- Tweaks
       ini.WriteBool('Tweaks', 'Hide_SB_HORZ', FHide_SB_HORZ);
@@ -5940,16 +5979,20 @@ begin
   ShowMessage('Done');
 end;
 
+{
 procedure TForm1.MoveNextSplits();
 var
  Clip : TClip;
- splits,s: String;
- i,x,nr, start, cur: Integer;
- a : TArray<String>;
+ splits,s,history: String;
+ i,x,nr,start, cur: Integer;
+ a,sa : TArray<String>;
+
 begin
   Clip:= GetSplitFirstClip(CurrentClip);
   If not Assigned(Clip) or (Clip.Splits = '') then
     exit;
+  ///ShowMessage(Clip.Splits);
+
   start:= TabView.TabIndex;
   cur:= -1;
   s:= '0';
@@ -5958,17 +6001,35 @@ begin
   nr := StrToIntDef(s, 0);
   if nr = 0 then
     exit;
-  a:= Clip.Splits.Split(['>']);   // contains also not valide integer entries
+
+  i := Pos('|', Clip.Splits);
+  if i > -1 then
+  begin
+    splits := Clip.Splits.Split(['|'])[0];
+    history:= Clip.Splits.Split(['|'])[1];
+  end
+  else begin
+     splits :=  Clip.Splits;
+     history:= '';
+  end;
+
+  a := splits.Split([',']);
+  //a:= Clip.Splits.Split(['>']);   // contains also not valide integer entries
+
+  //ShowMessage(intTostr(High(a)) + ' - ' + intTostr(TabView.Tabs.Count));
+  //exit;
+
   For i:= 0 to High(a) do
   begin
-    x := StrToIntDef(a[i], -1);   // check if entry valid integer
+    sa := a[i].Split(['>']);
+    x := StrToIntDef(sa[0], -1);
     if x > -1 then
     begin
       inc(cur);                  // inc valide index
       if cur >= start then       // if index >= change the value
       begin
         x := x + nr;
-        a[i]:= IntToStr(x)
+        a[i]:= IntToStr(x) + '>' + sa[1];
       end;
     end;
   end;
@@ -5982,12 +6043,81 @@ begin
   splits:= '';
   // now recreate the splits
   For i:= 0 to High(a) do
-    splits := splits + a[i] + '>';
+    splits := splits + a[i] + ',';
   // remove the last >
   Setlength(splits, length(splits) - 1);
+  if history <> '' then
+    splits := splits + '|' + history;
   Clip.Splits:= splits;
   popAutoSplitClipClick(self);
   MessageDlg('Done.'#13+'Check the clips and save it ''Store current splits''',mtInformation,[mbOK],0)
+end;
+}
+
+procedure TForm1.MoveNextSplit();
+var
+ Clip, curClip : TClip;
+ splits,s,history : String;
+ i,x,nr,start : Integer;
+ a,sa : TArray<String>;
+ ok : boolean;
+begin
+  curClip:= CurrentClip;
+  Clip:= GetSplitFirstClip(curClip);
+  If not Assigned(Clip) or (Clip.Splits = '') then
+    exit;
+  TabView_SplitSort(Clip);
+  start:= TabView_IndexOfClip(curClip);
+
+  s:= '0';
+  If not InputQuery('Move next split from current tab', 'Bookmark count', s) then
+    exit;
+  nr := StrToIntDef(s, 0);
+  if nr = 0 then
+    exit;
+
+  i := Pos('|', Clip.Splits);
+  if i > -1 then
+  begin
+    splits := Clip.Splits.Split(['|'])[0];
+    history:= Clip.Splits.Split(['|'])[1];
+  end
+  else begin
+     splits :=  Clip.Splits;
+     history:= '';
+  end;
+
+  a := splits.Split([',']);
+  splits:= '';
+  ok:= false;
+  For i:= 0 to High(a) do
+  begin
+    if i = start then
+    begin
+      sa := a[i].Split(['>']);
+      x := StrToIntDef(sa[0], -1);
+      if x > -1 then
+      begin
+        x := x + nr;
+        a[i]:= IntToStr(x) + '>' + sa[1];
+        ok := True
+      end;
+    end;
+    splits:= splits + a[i] + ',';
+  end;
+
+  if ok then
+  begin
+    // remove the last ,
+    Setlength(splits, length(splits) - 1);
+    if history <> '' then
+      splits := splits + '|' + history;
+    Clip.Splits:= splits;
+    popAutoSplitClipClick(self);
+    MessageDlg('Done.'#13+'Check the clips and save it ''Store current splits''',mtInformation,[mbOK],0)
+  end
+  else
+     MessageDlg('Nothing done!' ,mtError,[mbOK],0)
 end;
 
 procedure TForm1.popSaveFavoritesClick(Sender: TObject);
@@ -6054,6 +6184,8 @@ begin
   //- SaveToStream löst eine Fehler Message aus
   //~else ShowMessage('Error while writing stream');
 end;
+
+
 
 //- Only save favorites only if a bookstream has been opened.
 //- No deterioration of thumbnail quality.
@@ -6126,7 +6258,7 @@ begin
       i:= LV.Selected.Index
     else i:= 0;
     s:= IntToStr(i) + ',' + IntToStr(CurrentClip.FrameList.Count-1) + ',0';
-    If not InputQuery('Move frame numbers', 'start,end,amount', s) then
+    If not InputQuery('Move frame numbers', 'startIndex,endIndex,frames', s) then
       exit;
     s:= s.Replace(' ','');
     sr:= s.Split([',']);
@@ -6595,7 +6727,7 @@ end;
 
 procedure TForm1.popMoveAllSplitsClick(Sender: TObject);
 begin
-  MoveNextSplits();
+  MoveNextSplit();
 end;
 
 procedure TForm1.MoveFrameNr(idxStart, idxEnd, Amount: Integer; direct: boolean);
@@ -6715,8 +6847,8 @@ begin
         For i:= 0 to SL.Count-1 do  // disable prefetch and MCTD GPU
         begin
           s:= TrimLeft(SL[i]);
-          if s.StartsWith('prefetch',True) or s.StartsWith('#Bookmarks:', True) or
-             s.StartsWith('SetMemoryMax',True)then
+          if s.StartsWith('prefetch',True) or s.StartsWith('#Bookmarks:',True) or
+             s.StartsWith('SetMemoryMax',True) or s.StartsWith('/**avsp_split',True) then
                SL[i]:= '#~' + s
           else
             If s.TrimLeft.StartsWith('MCT', True) then
@@ -6880,6 +7012,8 @@ begin
         If FClipsToClipTweak then
         begin
           c:= 0;
+          w:= 0;  // compiler
+          h:= 0;
           For i:= 0 to Count -1 do //- check if size <>
           begin
             if i = 0 then
@@ -7348,3 +7482,4 @@ begin
 end;
 
 end.
+

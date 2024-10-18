@@ -8,7 +8,7 @@ unit AvisynthGrabber;
 
 interface
 uses
-  Windows,System.SysUtils,System.Classes,vcl.Graphics,avisynth;
+  Windows,System.SysUtils,System.Math, System.Classes,vcl.Graphics,avisynth;
 
 {$IFDEF WIN32}
   {$SetPEOptFlags IMAGE_FILE_LARGE_ADDRESS_AWARE}
@@ -86,9 +86,9 @@ type
     FSwapFrame: boolean;
     FCacheFrames: boolean;
     FIsInit: boolean;
-    FDataList: TList;
+    //FDataList: TList;
     FOnReadFrame: TOnReadFrame;
-    FInProgess: boolean;
+    //FInProgess: boolean;
     env: PAVS_ScriptEnvironment;
     clip: PAVS_Clip;
     source_clip: PAVS_Clip;
@@ -162,7 +162,8 @@ begin
   //~DataList_Create;
 end;
 
-//- Does not work if MCTD in the script used.
+// Does not work if MCTD in the script used. Now it works !
+// disabled all exceptions (e.g. float div zero) on app creating
 function TAvisynthGrabber2.OpenFromTxt(const Txt: String; const fileName: String;
   const Dest: TBitmap; const Nr: Integer): Integer;
 var
@@ -171,7 +172,7 @@ var
   //argname: array[0..1] of PAnsiChar;
   uFile, uDir, uName, uTxt, uwDir: AnsiString;
   n: Integer;
-  ST: TStringList;
+  //ST: TStringList;
   myFile: AnsiString;
 
   procedure ConvertErr(const s: String);
@@ -675,103 +676,126 @@ begin
   display_vi:= nil;
   clip:= nil;
 
-  MyFile:= AnsiString(FileName);
+
+{   test
+  unistring:=  FileName+#0;
+  Bytes:= TEncoding.UTF8.GetBytes(unistring);
+  source:= TEncoding.UTF8.GetBytes('AviSource');
+  //SetLength(Bytes, length(Bytes)-3);
+  ShowMessage(TEncoding.UTF8.GetString(Bytes));
 
   Try
-    argval[0]:= avs_new_value_string(PAnsiChar(MyFile));
-    avsval:= avs_invoke(env,'AviSource',avs_new_value_array(@argval, 1));
+    argval_p[0]:= avs_new_value_string_p(PChar(Bytes));
+    avsval:= avs_invoke_p(env,PChar(source),avs_new_value_array_p(@argval_p, 1));
     if avs_is_error(avsval) then
     begin
-      FClipError:= String(avs_as_error(avsval));
+      FClipError:= String(avs_as_error(avsval)) + ' 1';
       Abort;
     end;
+ }
 
-    clip:= avs_take_clip(avsval, env);
-    FClipError:= String(avs_clip_get_error(clip));
-    If (FClipError <> '') or not Assigned(clip) then
-    begin
-      If FClipError = '' then
-        FClipError:= 'Cannot create the clip';
-      Abort;
-    end;
 
-    if avs_function_exists(env, 'PixelType') then
-    begin
-      avsval2:= avs_new_value_clip(clip); // result must be release (memory leak)
-      FColorSpace:= String(avs_as_string(avs_invoke(env, 'PixelType', avsval2)));
-      avs_release_value(avsval2);
-    end
-    else begin
-      // TODO classic avs
-    end;
+  MyFile:= AnsiString(FileName);
+  Try
+    Try
+      argval[0]:= avs_new_value_string(PAnsiChar(MyFile));
+      //avsval:= avs_invoke(env,'AviSource',avs_new_value_array(@argval, 1));
+      avsval:= avs_invoke(env,'import', avs_new_value_array(@argval, 1));
+      if avs_is_error(avsval) then
+      begin
+        FClipError:= String(avs_as_error(avsval));
+        Abort;
+      end;
 
-    vi:= avs_get_video_info(clip);
-    avs_release_clip(clip);
+      clip:= avs_take_clip(avsval, env);
+      FClipError:= String(avs_clip_get_error(clip));
+      If (FClipError <> '') or not Assigned(clip) then
+      begin
+        If FClipError = '' then
+          FClipError:= 'Cannot create the clip';
+        Abort;
+      end;
 
-    If not Assigned(vi) or (vi.width < 1) then
-    begin
-      If Assigned(vi) and (vi.width < 1) then
-        FClipError:= 'The clip does not contain video'
-      else FClipError:= 'Cannot get the video info';
-      Abort;
-    end;
+      if avs_function_exists(env, 'PixelType') then
+      begin
+        avsval2:= avs_new_value_clip(clip); // result must be release (memory leak)
+        FColorSpace:= String(avs_as_string(avs_invoke(env, 'PixelType', avsval2)));
+        avs_release_value(avsval2);
+      end
+      else begin
+        // TODO classic avs
+      end;
 
-    //avs_set_var(env, 'last', avsval);
-    avsval2:= avs_invoke(env, 'ConvertToRGB32', avsval);
-    avs_release_value(avsval);
-    if avs_is_error(avsval2) then
-    begin
-      FClipError:= String(avs_as_error(avsval2));
-      Abort;
-    end;
-
-    clip:= avs_take_clip(avsval2, env);
-    avs_release_value(avsval2);
-
-    FClipError:= String(avs_clip_get_error(clip));
-    If (FClipError <> '') or not Assigned(clip) then
-    begin
-      If FClipError = '' then
-        FClipError:= 'Cannot create the display clip';
-      Abort;
-    end;
-
-    display_vi:= avs_get_video_info(clip);
-    If (display_vi= nil) or not avs_is_rgb32(display_vi) then
-    begin
-      FClipError:= 'Cannot get the display video info';
-      Abort;
-    end;
-  except
-    If FClipError = '' then
-      FClipError:= String(avs_get_error(env));
-    If FClipError = '' then
-      FClipError:= ('Unknown Error: Cannot create the clip');
-    if Assigned(clip) then
+      vi:= avs_get_video_info(clip);
       avs_release_clip(clip);
-    vi:= nil;
-    display_vi:= nil;
-    clip:= nil;
-    exit;
-  end;
 
-  Result:= display_vi.num_frames;
+      If not Assigned(vi) or (vi.width < 1) then
+      begin
+        If Assigned(vi) and (vi.width < 1) then
+          FClipError:= 'The clip does not contain video'
+        else FClipError:= 'Cannot get the video info';
+        Abort;
+      end;
 
-  if Nr < display_vi.num_frames then
-    n:= Nr
-  else
-    n:= display_vi.num_frames-1;
+      //avs_set_var(env, 'last', avsval);
+      avsval2:= avs_invoke(env, 'ConvertToRGB32', avsval);
+      avs_release_value(avsval);
+      if avs_is_error(avsval2) then
+      begin
+        FClipError:= String(avs_as_error(avsval2));
+        Abort;
+      end;
 
-  If Assigned(Dest) then
-  begin
-    Dest.PixelFormat:= pf32bit;
-    Dest.SetSize(display_vi.width, display_vi.height);
-    if n > -1 then
-      GrabbFrame(n, Dest);
-  end
-  else
-    if Assigned(FOnReadFrame) then
-      ReadFrame(n);
+      clip:= avs_take_clip(avsval2, env);
+      avs_release_value(avsval2);
+
+      FClipError:= String(avs_clip_get_error(clip));
+      If (FClipError <> '') or not Assigned(clip) then
+      begin
+        If FClipError = '' then
+          FClipError:= 'Cannot create the display clip';
+        Abort;
+      end;
+
+      display_vi:= avs_get_video_info(clip);
+      If (display_vi= nil) or not avs_is_rgb32(display_vi) then
+      begin
+        FClipError:= 'Cannot get the display video info';
+        Abort;
+      end;
+    except
+      If FClipError = '' then
+        FClipError:= String(avs_get_error(env));
+      If FClipError = '' then
+        FClipError:= ('Unknown Error: Cannot create the clip');
+      if Assigned(clip) then
+        avs_release_clip(clip);
+      vi:= nil;
+      display_vi:= nil;
+      clip:= nil;
+      exit;
+    end;
+
+    Result:= display_vi.num_frames;
+
+    if Nr < display_vi.num_frames then
+      n:= Nr
+    else
+      n:= display_vi.num_frames-1;
+
+    If Assigned(Dest) then
+    begin
+      Dest.PixelFormat:= pf32bit;
+      Dest.SetSize(display_vi.width, display_vi.height);
+      if n > -1 then
+        GrabbFrame(n, Dest);
+    end
+    else
+      if Assigned(FOnReadFrame) then
+        ReadFrame(n);
+  Finally
+     //
+  End;
 end;
 
 function TAvisynthGrabber.OpenFromTxt(const Txt: String; const fileName: String;
@@ -782,7 +806,7 @@ var
   //argname: array[0..1] of PAnsiChar;
   uFile, uDir, uName, uTxt, uwDir: AnsiString;
   n: Integer;
-  ST: TStringList;
+  //ST: TStringList;
   myFile: AnsiString;
 
   procedure ConvertErr(const s: String);
@@ -980,7 +1004,6 @@ begin
   FFrameError:= '';
   DoCache:= FCacheFrames;
   frame:= nil;
-
   Try
     if (clip= nil) or not avs_is_rgb32(display_vi) then
     begin

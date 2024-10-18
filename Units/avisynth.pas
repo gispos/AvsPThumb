@@ -263,6 +263,7 @@ type
   PAVS_VideoInfo = ^AVS_VideoInfo;
   PAVS_FilterInfo = ^AVS_FilterInfo;
   PAVS_Value_array = ^AVS_Value_array;
+  PAVS_Value_array_p = ^AVS_Value_array_p;
 
   AVS_VideoInfo = record
     width, height: Integer;
@@ -301,13 +302,28 @@ type
       's': (vstring: PAnsiChar);
       'a': (varray: PAVS_Value_array);
   end;
+
+  AVS_Value_p = record
+    vtype: WideChar;
+    array_size: Smallint;
+    case Char of
+      'c': (vclip: Pointer);
+      'b': (vboolean: LongBool);
+      'i': (vinteger: Integer);
+      'f': (vfloating_pt: Single);
+      's': (vstring: PChar);
+      'a': (varray: PAVS_Value_array_p);
+  end;
   // can moore eg. 100
   AVS_Value_array = array[0..9] of AVS_Value;
+  AVS_Value_array_p = array[0..9] of AVS_Value_p;
 
 {$IFDEF WIN32}
   MSVC_AVS_Value = type Int64;
+  MSVC_AVS_Value_p = MSVC_AVS_Value;
 {$ELSE}
-  MSVC_AVS_Value = AVS_Value;
+  MSVC_AVS_Value = type AVS_Value;
+  MSVC_AVS_Value_p = AVS_Value_p;
 {$ENDIF}
 
   //CacheHints
@@ -397,6 +413,8 @@ var
 // local with type cast (AVS_Value)
 function avs_invoke(env: PAVS_ScriptEnvironment; name: PAnsiChar; args: AVS_Value; arg_names: array of PAnsiChar): AVS_Value; overload;
 function avs_invoke(env: PAVS_ScriptEnvironment; name: PAnsiChar; args: AVS_Value): AVS_Value; overload;
+function avs_invoke_p(env: PAVS_ScriptEnvironment; name: PChar; args: AVS_Value_p): AVS_Value;
+
 function avs_take_clip(v: AVS_Value; env: PAVS_ScriptEnvironment): PAVS_Clip;
 procedure avs_release_value(v: AVS_Value);
 procedure avs_copy_value(var dest: AVS_Value; src: AVS_Value);
@@ -445,9 +463,11 @@ function avs_array_elt(v: AVS_Value; index: Integer): AVS_Value;
 function avs_new_value_bool(v0: Boolean): AVS_Value;
 function avs_new_value_int(v0: Integer): AVS_Value;
 function avs_new_value_string(v0: PAnsiChar): AVS_Value;
+function avs_new_value_string_p(v0: PChar): AVS_Value_p;
 function avs_new_value_float(v0: Single): AVS_Value;
 function avs_new_value_error(v0: PAnsiChar): AVS_Value;
 function avs_new_value_array(v0: PAVS_Value_array; size: Integer): AVS_Value;
+function avs_new_value_array_p(v0: PAVS_Value_array_p; size: Integer): AVS_Value_p;
 // Warn, returned value must be released
 function avs_new_value_clip(v0: PAVS_Clip): AVS_Value;
 
@@ -481,6 +501,7 @@ var
 
   // Imported functions using AVS_Value which need special typecasting to work properly
   ext_avs_invoke: function(env: PAVS_ScriptEnvironment; name: PAnsiChar; args: MSVC_AVS_Value; arg_names: PPAnsiChar): MSVC_AVS_Value; stdcall;
+  ext_avs_invoke_p: function(env: PAVS_ScriptEnvironment; name: PChar; args: MSVC_AVS_Value_p; arg_names: PPChar): MSVC_AVS_Value; stdcall;
   ext_avs_take_clip: function(v: MSVC_AVS_Value; env: PAVS_ScriptEnvironment): PAVS_Clip; stdcall;
   ext_avs_release_value: procedure(v: MSVC_AVS_Value); stdcall;
   ext_avs_copy_value: procedure(var dest: AVS_Value; src: MSVC_AVS_Value); stdcall;
@@ -558,6 +579,7 @@ begin
 
   // Imported functions using AVS_Value which need special typecasting to work properly
   @ext_avs_invoke:= GetProcAddress(FDLLHandle, 'avs_invoke');
+  @ext_avs_invoke_p:= GetProcAddress(FDLLHandle, 'avs_invoke');
   @ext_avs_take_clip:= GetProcAddress(FDLLHandle, 'avs_take_clip');
   @ext_avs_release_value:= GetProcAddress(FDLLHandle, 'avs_release_value');
   @ext_avs_copy_value:= GetProcAddress(FDLLHandle,'avs_copy_value');
@@ -626,6 +648,11 @@ end;
 function avs_invoke(env: PAVS_ScriptEnvironment; name: PAnsiChar; args: AVS_Value): AVS_Value;
 begin
   Result:= AVS_Value(ext_avs_invoke(env, name, MSVC_AVS_Value(args), nil));
+end;
+
+function avs_invoke_p(env: PAVS_ScriptEnvironment; name: PChar; args: AVS_Value_p): AVS_Value;
+begin
+  Result:= AVS_Value(ext_avs_invoke_p(env, name, MSVC_AVS_Value_p(args), nil));
 end;
 
 procedure avs_release_value(v: AVS_Value);
@@ -810,6 +837,12 @@ begin
   Result.vstring := v0;
 end;
 
+function avs_new_value_string_p(v0: PChar): AVS_Value_p;
+begin
+  Result.vtype := 's';
+  Result.vstring := v0;
+end;
+
 function avs_new_value_float(v0: Single): AVS_Value;
 begin
   Result.vtype := 'f';
@@ -831,6 +864,13 @@ begin
 end;
 
 function avs_new_value_array(v0: PAVS_Value_array; size: Integer): AVS_Value;
+begin
+  Result.vtype := 'a';
+  Result.varray := v0;
+  Result.array_size := size;
+end;
+
+function avs_new_value_array_p(v0: PAVS_Value_array_p; size: Integer): AVS_Value_p;
 begin
   Result.vtype := 'a';
   Result.varray := v0;

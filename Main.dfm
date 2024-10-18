@@ -11,13 +11,11 @@ object Form1: TForm1
   Font.Name = 'Tahoma'
   Font.Style = []
   FormStyle = fsStayOnTop
-  OldCreateOrder = False
   Position = poDesigned
   Visible = True
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  PixelsPerInch = 96
   TextHeight = 13
   object LV: TListViewEx
     Left = 0
@@ -317,6 +315,10 @@ object Form1: TForm1
         Caption = 'Merge with previous'
         OnClick = popSplitMergePrevClick
       end
+      object popMoveAllSplits: TMenuItem
+        Caption = 'Move next Split...'
+        OnClick = popMoveAllSplitsClick
+      end
       object N19: TMenuItem
         Caption = '-'
       end
@@ -423,6 +425,12 @@ object Form1: TForm1
         Caption = 'Background color...'
         OnClick = popBackgroundColorClick
       end
+      object popActiveTabColor: TMenuItem
+        Caption = 'Active tab color...'
+        Enabled = False
+        Visible = False
+        OnClick = popActiveTabColorClick
+      end
       object N2: TMenuItem
         Caption = '-'
       end
@@ -473,6 +481,10 @@ object Form1: TForm1
       object popShowTitle: TMenuItem
         AutoCheck = True
         Caption = 'Show Title'
+      end
+      object popShowIndex: TMenuItem
+        AutoCheck = True
+        Caption = 'Show Index'
       end
       object popSingleInstance: TMenuItem
         AutoCheck = True

@@ -1,8 +1,9 @@
-# Load the bookmark file if the bookmark file exits else read from script if the script on the disk saved
+# Open all tabs bookmark files if the bookmark file exits
 
 import os.path
 import subprocess
 import sys
+
 
 # user setting, you must set the path to AvsPthumb for 64 and/or 32 bit version
 tool64 = 'D:\Tools GPo (x64)\AvsThumb\AvsPThumb.exe'
@@ -17,16 +18,18 @@ else:
 if not os.path.isfile(runFile):
     avsp.MsgBox('%s\nnot found. You must set the file name in the macro' % runFile, _('Error'))
     return
+self = avsp.GetWindow()
+param = ''
 
-filename =  os.path.splitext(avsp.GetScriptFilename(propose='general'))[0]
-if not filename:
-    avsp.MsgBox('You must save the script', _('Error'))
+for index in xrange(self.scriptNotebook.GetPageCount()):
+    script = self.scriptNotebook.GetPage(index)
+    filename = os.path.splitext(script.filename)[0] + suffix
+    if os.path.isfile(filename):
+        param += '"' + filename + '" '
+        
+param = param.strip()
+if not param:
     return
-if os.path.isfile(filename+suffix):
-    filename += suffix
-else:
-    filename = avsp.GetScriptFilename(propose='general')
 
-param = ' "'+ filename + '"'
 param = param.encode(sys.getfilesystemencoding())
-subprocess.Popen('"' + runFile + '"' + param, shell=True)
+subprocess.Popen('"' + runFile + '" ' + param, shell=True)
